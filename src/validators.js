@@ -291,7 +291,8 @@ export const validateMemberConstraints = (data) => {
       if (!constraint.member_id) {
         errors.push(`Member constraint #${index + 1}: Missing member_id`)
       } else if (!validMemberIds.has(constraint.member_id)) {
-        warnings.push(`Member constraint for "${constraint.member_id}": Member not found`)
+        const memberName = members.find(m => m.id === constraint.member_id)?.name || constraint.member_id
+        warnings.push(`Member constraint for "${memberName}": Member not found`)
       }
     })
   }

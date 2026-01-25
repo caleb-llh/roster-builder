@@ -46,35 +46,30 @@ export const CONSTRAINT_METADATA = {
     label: 'Enforce Member Roles',
     description: 'Members can only be assigned to roles they are qualified for',
     userFriendly: 'Members can only be assigned to roles they are qualified for',
-    category: 'eligibility',
     type: 'boolean',
   },
   [CONSTRAINT_KEYS.ENFORCE_MEMBER_AVAILABILITY]: {
     label: 'Enforce Member Availability',
     description: 'Members are only assigned when they are available',
     userFriendly: 'Members are only assigned when they are available',
-    category: 'availability',
     type: 'boolean',
   },
   [CONSTRAINT_KEYS.ONLY_ONCE_PER_EVENT]: {
     label: 'Only Once Per Event',
     description: 'A member cannot be assigned to multiple roles in the same event',
     userFriendly: 'No one gets assigned to multiple roles in the same event',
-    category: 'frequency',
     type: 'boolean',
   },
   [CONSTRAINT_KEYS.ONLY_ONCE_PER_WEEK]: {
     label: 'Only Once Per Week',
     description: 'A member can only be assigned once per week',
     userFriendly: 'Each member is assigned at most once per week',
-    category: 'frequency',
     type: 'boolean',
   },
   [CONSTRAINT_KEYS.MAX_ASSIGNMENTS_PER_MONTH]: {
     label: 'Max Assignments Per Month',
     description: 'Members will not exceed the specified monthly assignment limit',
     userFriendly: "Members won't exceed the specified monthly assignment limit",
-    category: 'frequency',
     type: 'integer',
   },
 }
@@ -95,28 +90,24 @@ export const PREFERENCE_METADATA = {
     label: 'Avoid Consecutive Weeks',
     description: 'Avoid assigning the same member to consecutive weekend events',
     userFriendly: 'Avoid assigning the same member to consecutive weekend events',
-    category: 'frequency',
     type: 'boolean',
   },
   [PREFERENCE_KEYS.SPREAD_ASSIGNMENTS]: {
     label: 'Spread Assignments',
     description: 'For each member, spread assignments evenly across the roster period',
     userFriendly: 'For each member, spread assignments evenly across the roster period',
-    category: 'spread',
     type: 'boolean',
   },
   [PREFERENCE_KEYS.DIVERSIFY_ROLE_ASSIGNMENTS]: {
     label: 'Diversify Role Assignments',
     description: 'Maximize variety by assigning different members to each role',
     userFriendly: 'Maximize variety by assigning different members to each role',
-    category: 'variety',
     type: 'boolean',
   },
   [PREFERENCE_KEYS.BALANCED_DAY_DISTRIBUTION]: {
     label: 'Balanced Day Distribution',
     description: 'Balance number of assignments across different days of week (e.g. Sundays and Saturdays)',
     userFriendly: 'Balance number of assignments across different days of week (e.g. Sundays and Saturdays)',
-    category: 'variety',
     type: 'boolean',
   },
 }
@@ -129,6 +120,7 @@ export const MEMBER_PREF_FIELDS = {
   MEMBER_NAME: 'member_name',
   PREFERRED_DAY: 'preferred_day',
   MAX_ASSIGNMENTS: 'max_assignments',
+  PREFERRED_ROLES: 'roles',
 }
 
 // ============================================================================

@@ -24,7 +24,7 @@ describe('assignmentValidator', () => {
       const result = validateEventAssignments(events, mockMembers, memberConstraints, [], {}, {})
       
       expect(result['2026-02-15']).toBeDefined()
-      expect(result['2026-02-15'].errors).toContain('alice is unavailable on this date')
+      expect(result['2026-02-15'].errors).toContain('Alice is unavailable on this date')
     })
 
     it('should detect when member is unavailable in date range', () => {
@@ -42,7 +42,7 @@ describe('assignmentValidator', () => {
 
       const result = validateEventAssignments(events, mockMembers, memberConstraints, [], {}, {})
       
-      expect(result['2026-02-20'].errors).toContain('bob is unavailable on this date')
+      expect(result['2026-02-20'].errors).toContain('Bob is unavailable on this date')
     })
 
     it('should not flag when member is available', () => {
@@ -175,8 +175,8 @@ describe('assignmentValidator', () => {
       const result = validateEventAssignments(events, mockMembers, [], [], rosterConstraints, {})
       
       // Both events should have errors
-      expect(result['2026-02-09'].errors.some(e => e.includes('alice is already rostered'))).toBe(true)
-      expect(result['2026-02-14'].errors.some(e => e.includes('alice is already rostered'))).toBe(true)
+      expect(result['2026-02-09'].errors.some(e => e.includes('Alice') && e.includes('already rostered'))).toBe(true)
+      expect(result['2026-02-14'].errors.some(e => e.includes('Alice') && e.includes('already rostered'))).toBe(true)
     })
 
     it('should not flag Saturday and Sunday of different weeks', () => {
@@ -222,8 +222,8 @@ describe('assignmentValidator', () => {
       const result = validateEventAssignments(events, mockMembers, [], [], rosterConstraints, {})
       
       // Both events should have errors (same week: Feb 2-8)
-      expect(result['2026-02-07'].errors.some(e => e.includes('alice is already rostered'))).toBe(true)
-      expect(result['2026-02-08'].errors.some(e => e.includes('alice is already rostered'))).toBe(true)
+      expect(result['2026-02-07'].errors.some(e => e.includes('Alice') && e.includes('already rostered'))).toBe(true)
+      expect(result['2026-02-08'].errors.some(e => e.includes('Alice') && e.includes('already rostered'))).toBe(true)
     })
 
     it('should not flag when member is rostered on different weeks', () => {
@@ -295,8 +295,8 @@ describe('assignmentValidator', () => {
 
       const result = validateEventAssignments(events, mockMembers, [], [], {}, rosterPreferences)
       
-      expect(result['2026-02-07'].warnings.some(w => w.includes('alice is rostered on consecutive weekend'))).toBe(true)
-      expect(result['2026-02-14'].warnings.some(w => w.includes('alice is rostered on consecutive weekend'))).toBe(true)
+      expect(result['2026-02-07'].warnings.some(w => w.includes('Alice') && w.includes('consecutive weekend'))).toBe(true)
+      expect(result['2026-02-14'].warnings.some(w => w.includes('Alice') && w.includes('consecutive weekend'))).toBe(true)
     })
 
     it('should not warn when weekends are not consecutive', () => {
@@ -378,7 +378,7 @@ describe('assignmentValidator', () => {
       const result = validateEventAssignments(events, mockMembers, memberConstraints, [], rosterConstraints, {})
       
       expect(result['2026-02-15'].errors).toHaveLength(2)
-      expect(result['2026-02-15'].errors).toContain('alice is unavailable on this date')
+      expect(result['2026-02-15'].errors).toContain('Alice is unavailable on this date')
       expect(result['2026-02-15'].errors.some(e => e.includes('Alice is assigned to multiple roles'))).toBe(true)
     })
 

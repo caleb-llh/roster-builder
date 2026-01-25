@@ -360,5 +360,104 @@ describe('Roster Generator', () => {
       // Alice prefers Sunday, should likely be assigned
       expect(result.events[0].roster[0].member_id).toBe('alice')
     })
+
+    it('should consider member role preferences in scoring', () => {
+      const members = [
+        { id: 'alice', name: 'Alice', include: true, roles: ['vm', 'cam-1'] },
+        { id: 'bob', name: 'Bob', include: true, roles: ['vm', 'cam-1'] }
+      ]
+      const events = [{
+        name: 'Sunday Service',
+        date: '2026-02-01',
+        day_of_week: 'Sunday',
+        roster: [
+          { role: 'vm', member_id: null },
+          { role: 'cam-1', member_id: null }
+        ]
+      }]
+      const preferences = [
+        { member_id: 'alice', roles: ['cam-1'] }
+      ]
+      
+      const result = generateRoster(
+        events,
+        members,
+        [],
+        preferences,
+        rosterConstraints,
+        rosterPreferences,
+        rosterPeriod
+      )
+
+      // Alice prefers cam-1, should be assigned to cam-1 role
+      const aliceAssignment = result.events[0].roster.find(r => r.member_id === 'alice')
+      expect(aliceAssignment).toBeTruthy()
+      expect(aliceAssignment.role).toBe('cam-1')
+    })
+
+    it('should prioritize role preferences when multiple members are eligible', () => {
+      const members = [
+        { id: 'alice', name: 'Alice', include: true, roles: ['support'] },
+        { id: 'bob', name: 'Bob', include: true, roles: ['support'] },
+        { id: 'charlie', name: 'Charlie', include: true, roles: ['support'] }
+      ]
+      const events = [{
+        name: 'Service',
+        date: '2026-02-01',
+        day_of_week: 'Sunday',
+        roster: [{ role: 'support', member_id: null }]
+      }]
+      const preferences = [
+        { member_id: 'bob', roles: ['support'] }
+      ]
+      
+      const result = generateRoster(
+        events,
+        members,
+        [],
+        preferences,
+        rosterConstraints,
+        rosterPreferences,
+        rosterPeriod
+      )
+
+      // Bob has role preference for support, should be preferred
+      expect(result.events[0].roster[0].member_id).toBe('bob')
+    })
+
+    it('should handle combined day and role preferences', () => {
+      const members = [
+        { id: 'alice', name: 'Alice', include: true, roles: ['lead', 'support'] },
+        { id: 'bob', name: 'Bob', include: true, roles: ['lead', 'support'] },
+        { id: 'charlie', name: 'Charlie', include: true, roles: ['lead', 'support'] }
+      ]
+      const events = [
+        {
+          name: 'Saturday Service',
+          date: '2026-02-01',
+          day_of_week: 'Saturday',
+          roster: [
+            { role: 'support', member_id: null }
+          ]
+        }
+      ]
+      const preferences = [
+        { member_id: 'alice', days: ['Saturday'], roles: ['support'] }
+      ]
+      
+      const result = generateRoster(
+        events,
+        members,
+        [],
+        preferences,
+        { ...rosterConstraints, MAX_ASSIGNMENTS_PER_MONTH: 5 },
+        rosterPreferences,
+        rosterPeriod
+      )
+
+      // Alice has both day (Saturday) and role (support) preferences
+      // She should be strongly preferred with combined preference bonus
+      expect(result.events[0].roster[0].member_id).toBe('alice')
+    })
   })
 })

@@ -299,7 +299,7 @@ function App() {
                 className="px-3 sm:px-4 py-2 sm:py-2.5 text-sm font-medium text-gray-700 bg-white/60 backdrop-blur-md border border-gray-300/50 rounded-lg shadow-md hover:bg-gray-50/80 active:bg-gray-100/80 transition-all touch-manipulation min-h-[44px]"
                 title="Import new data"
               >
-                📥 <span className="sm:inline">Import</span><span className="sm:hidden">Import</span>
+                📥 <span className="sm:inline">Import</span>
               </button>
               
               {/* Generation Buttons */}
@@ -382,9 +382,9 @@ function App() {
       </header>
 
       {/* Split View Container */}
-      <div className="flex flex-col xl:flex-row">
+      <div className="flex flex-col lg:flex-row">
         {/* Members Section */}
-        <div className="w-full xl:w-5/12 xl:border-r border-gray-200 pb-4 xl:pb-0">
+        <div className="w-full lg:w-5/12 lg:border-r border-gray-200 pb-4 lg:pb-0">
           <MembersView 
             members={members}
             roles={roles}
@@ -392,11 +392,12 @@ function App() {
             warnings={data?.warnings}
             searchQuery={searchQuery}
             memberConstraints={memberConstraints}
+            memberPreferences={memberPreferences}
           />
         </div>
 
         {/* Events Section */}
-        <div className="w-full xl:w-7/12">
+        <div className="w-full lg:w-7/12">
           <EventsView 
             events={events}
             members={members}

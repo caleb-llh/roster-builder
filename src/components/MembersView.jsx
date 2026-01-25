@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { WarningBanner, MemberCard } from './SharedComponents'
 
-export default function MembersView({ members, roles, roleColorMap, warnings, searchQuery, memberConstraints }) {
+export default function MembersView({ members, roles, roleColorMap, warnings, searchQuery, memberConstraints, memberPreferences }) {
   const [selectedRole, setSelectedRole] = useState('All')
 
   const activeMembers = members.filter(m => m.include !== false)
@@ -50,7 +50,7 @@ export default function MembersView({ members, roles, roleColorMap, warnings, se
       {/* Member Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
         {filteredMembers.map((member, i) => (
-          <MemberCard key={i} member={member} roleColorMap={roleColorMap} memberConstraints={memberConstraints} />
+          <MemberCard key={i} member={member} roleColorMap={roleColorMap} memberConstraints={memberConstraints} memberPreferences={memberPreferences} />
         ))}
       </div>
 

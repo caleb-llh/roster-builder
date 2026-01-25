@@ -14,9 +14,10 @@ export class ScoringEngine {
     this.weights = {
       fairness: 100,              // Highest priority: balance workload
       dayPreference: 150,         // Member day preferences (high priority - member-level overrides roster-level)
+      rolePreference: 120,        // Member role preferences (high priority - member-level preference)
       spread: 50,                 // Spread assignments over time
       consecutiveWeekends: 40,    // Avoid consecutive weekends
-      dayBalance: 20,             // Balance days across member's assignments
+      dayBalance: 20,             // Balance number of assignments across different days of week (e.g. Sundays and Saturdays)
       roleDiversity: 60           // Encourage role diversity
     }
   }
@@ -47,6 +48,11 @@ export class ScoringEngine {
     const dayPrefScore = this._calculateDayPreferenceScore(memberId, event.day_of_week)
     scores.dayPreference = dayPrefScore
     totalScore += dayPrefScore * this.weights.dayPreference
+    
+    // Member role preference
+    const rolePrefScore = this._calculateRolePreferenceScore(memberId, role)
+    scores.rolePreference = rolePrefScore
+    totalScore += rolePrefScore * this.weights.rolePreference
     
     // Balanced day distribution
     if (isPreferenceEnabled(this.rosterPreferences, PREFERENCE_KEYS.BALANCED_DAY_DISTRIBUTION)) {
@@ -114,6 +120,16 @@ export class ScoringEngine {
     }
     
     return memberPref.days.includes(dayOfWeek) ? 1.0 : 0.0
+  }
+  
+  _calculateRolePreferenceScore(memberId, role) {
+    const memberPref = this.memberPreferences.find(p => p.member_id === memberId)
+    
+    if (!memberPref || !memberPref.roles || memberPref.roles.length === 0) {
+      return 0.5 // Neutral if no role preference
+    }
+    
+    return memberPref.roles.includes(role) ? 1.0 : 0.0
   }
   
   _calculateDayBalanceScore(memberId, dayOfWeek) {

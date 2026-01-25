@@ -126,13 +126,20 @@ export const WarningBanner = ({ warnings }) => {
   )
 }
 
-export const MemberCard = ({ member, roleColorMap, memberConstraints }) => {
+export const MemberCard = ({ member, roleColorMap, memberConstraints, memberPreferences }) => {
   const [showUnavailability, setShowUnavailability] = useState(false)
+  const [showPreferences, setShowPreferences] = useState(false)
   
   // Find constraints for this member using member.id
   const memberConstraintData = memberConstraints?.find(c => c.member_id === member.id)
   const unavailableDates = memberConstraintData?.unavailable_dates || []
   const hasUnavailability = unavailableDates.length > 0
+  
+  // Find preferences for this member
+  const memberPreferenceData = memberPreferences?.find(p => p.member_id === member.id)
+  const preferredDays = memberPreferenceData?.days || []
+  const preferredRoles = memberPreferenceData?.roles || []
+  const hasPreferences = preferredDays.length > 0 || preferredRoles.length > 0
   
   // Format unavailable dates
   const formatUnavailableDate = (dateItem) => {
@@ -168,24 +175,53 @@ export const MemberCard = ({ member, roleColorMap, memberConstraints }) => {
         ))}
       </div>
       
-      {/* Unavailable Period Section */}
-      {hasUnavailability && (
-        <div className="mt-2 pt-2 border-t border-gray-200">
-          <button
-            onClick={() => setShowUnavailability(!showUnavailability)}
-            className="text-xs text-gray-600 hover:text-gray-800 font-medium flex items-center justify-between w-full"
-          >
-            <span className="flex items-center gap-1">
-              {showUnavailability ? '▼' : '▶'} Unavailable Period ({unavailableDates.length})
-            </span>
-          </button>
-          {showUnavailability && (
-            <div className="mt-2 space-y-1">
-              {unavailableDates.map((dateItem, idx) => (
-                <div key={idx} className="text-xs text-gray-700 bg-gray-50/60 px-2 py-1.5 rounded border border-gray-200/40">
-                  📅 {formatUnavailableDate(dateItem)}
+      {/* Unavailable Period and Preferences Section */}
+      {(hasUnavailability || hasPreferences) && (
+        <div className="mt-2 pt-2 border-t border-gray-200 space-y-2">
+          {/* Unavailable Period */}
+          {hasUnavailability && (
+            <div>
+              <button
+                onClick={() => setShowUnavailability(!showUnavailability)}
+                className="text-xs text-gray-600 hover:text-gray-800 font-medium flex items-center gap-1 w-full text-left"
+              >
+                {showUnavailability ? '▼' : '▶'} Unavailable Period ({unavailableDates.length})
+              </button>
+              {showUnavailability && (
+                <div className="mt-2 space-y-1">
+                  {unavailableDates.map((dateItem, idx) => (
+                    <div key={idx} className="text-xs text-gray-700 bg-gray-50/60 px-2 py-1.5 rounded border border-gray-200/40">
+                      📅 {formatUnavailableDate(dateItem)}
+                    </div>
+                  ))}
                 </div>
-              ))}
+              )}
+            </div>
+          )}
+          
+          {/* Preferences */}
+          {hasPreferences && (
+            <div>
+              <button
+                onClick={() => setShowPreferences(!showPreferences)}
+                className="text-xs text-gray-600 hover:text-gray-800 font-medium flex items-center gap-1 w-full text-left"
+              >
+                {showPreferences ? '▼' : '▶'} Preferences
+              </button>
+              {showPreferences && (
+                <div className="mt-2 space-y-1">
+                  {preferredDays.length > 0 && (
+                    <div className="text-xs text-gray-700 bg-blue-50/60 px-2 py-1.5 rounded border border-blue-200/40">
+                      📅 Prefers: {preferredDays.join(', ')}
+                    </div>
+                  )}
+                  {preferredRoles.length > 0 && (
+                    <div className="text-xs text-gray-700 bg-purple-50/60 px-2 py-1.5 rounded border border-purple-200/40">
+                      🎭 Prefers: {preferredRoles.join(', ')}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </div>

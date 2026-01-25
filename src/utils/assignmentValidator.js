@@ -22,7 +22,7 @@ import { CONSTRAINT_KEYS, PREFERENCE_KEYS, isConstraintEnabled, isPreferenceEnab
 /**
  * Check if member is assigned on unavailable date
  */
-const checkUnavailabilityViolation = (event, memberConstraints) => {
+const checkUnavailabilityViolation = (event, memberConstraints, members) => {
   const errors = []
   
   if (!event.roster || !Array.isArray(event.roster)) return errors
@@ -30,7 +30,8 @@ const checkUnavailabilityViolation = (event, memberConstraints) => {
   event.roster.forEach(assignment => {
     if (assignment.member_id) {
       if (!checkMemberAvailability(assignment.member_id, event.date, memberConstraints)) {
-        errors.push(`${assignment.member_id} is unavailable on this date`)
+        const member = members.find(m => m.id === assignment.member_id)
+        errors.push(`${member?.name || assignment.member_id} is unavailable on this date`)
       }
     }
   })
@@ -84,9 +85,10 @@ const checkRosterConstraints = (event, allEvents, rosterConstraints, members) =>
     assignedMemberIds.forEach(memberId => {
       const weekAssignments = getWeekAssignments(memberId, event.date, allEvents)
       const otherWeekEvents = weekAssignments.filter(e => e.date !== event.date)
+      const member = members.find(m => m.id === memberId)
       
       otherWeekEvents.forEach(weekEvent => {
-        errors.push(`${memberId} is already rostered on ${weekEvent.date} (${weekEvent.day_of_week}) this week`)
+        errors.push(`${member?.name || memberId} is already rostered on ${weekEvent.date} (${weekEvent.day_of_week}) this week`)
       })
     })
   }
@@ -113,7 +115,7 @@ const checkRosterConstraints = (event, allEvents, rosterConstraints, members) =>
 /**
  * Check roster preferences violations
  */
-const checkRosterPreferences = (event, allEvents, rosterPreferences) => {
+const checkRosterPreferences = (event, allEvents, rosterPreferences, members) => {
   const warnings = []
   
   if (!event.roster || !rosterPreferences) return warnings
@@ -129,12 +131,13 @@ const checkRosterPreferences = (event, allEvents, rosterPreferences) => {
       const otherAssignments = allEvents.filter(e => 
         e.date !== event.date && e.roster?.some(r => r.member_id === memberId)
       )
+      const member = members.find(m => m.id === memberId)
       
       otherAssignments.forEach(otherEvent => {
         // Check both directions since areConsecutiveWeekends checks if date2 follows date1
         if (areConsecutiveWeekends(event.date, otherEvent.date) || 
             areConsecutiveWeekends(otherEvent.date, event.date)) {
-          warnings.push(`${memberId} is rostered on consecutive weekend (${otherEvent.date})`)
+          warnings.push(`${member?.name || memberId} is rostered on consecutive weekend (${otherEvent.date})`)
         }
       })
     })
@@ -181,12 +184,12 @@ export const validateEventAssignments = (events, members, memberConstraints, mem
     
     const errors = [
       ...checkRosterPeriodViolation(event, rosterPeriod),
-      ...checkUnavailabilityViolation(event, memberConstraints),
+      ...checkUnavailabilityViolation(event, memberConstraints, members),
       ...checkRosterConstraints(event, events, rosterConstraints, members)
     ]
     
     const warnings = [
-      ...checkRosterPreferences(event, events, rosterPreferences),
+      ...checkRosterPreferences(event, events, rosterPreferences, members),
       ...checkMemberPreferences(event, memberPreferences, members)
     ]
     

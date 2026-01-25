@@ -45,6 +45,24 @@ export default function RosterStatsPanel({ stats, generationResult, members }) {
         </div>
       </div>
 
+      {/* Unassignable Roles Warning */}
+      {generationResult?.stats?.unassignableRoles && generationResult.stats.unassignableRoles.length > 0 && (
+        <div className="bg-red-50 rounded-lg p-3 border border-red-200 mb-3">
+          <div className="text-xs font-semibold text-red-900 mb-2">
+            ⚠️ Unassignable Roles ({generationResult.stats.unassignableRoles.length})
+          </div>
+          <div className="space-y-1.5 text-xs max-h-32 overflow-y-auto">
+            {generationResult.stats.unassignableRoles.map((item, idx) => (
+              <div key={idx} className="bg-white rounded p-2">
+                <div className="font-medium text-gray-900">{item.event}</div>
+                <div className="text-gray-600">{item.date} - {item.role}</div>
+                <div className="text-red-600 text-xs mt-0.5">{item.reason}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Detailed Stats - Show Generation Result if available, otherwise member workload */}
       {showDetails && (
         <div className="border-t border-gray-200 pt-3">
