@@ -21,11 +21,27 @@ export function encodeYAMLToURL(yamlText) {
  */
 export function decodeYAMLFromURL(encoded) {
   try {
+    console.log('[URL Decode] Attempting to decompress:', { 
+      length: encoded.length,
+      preview: encoded.substring(0, 30) + '...'
+    })
+    
     // Decompress from Base64
     const decompressed = LZString.decompressFromEncodedURIComponent(encoded)
+    
+    if (!decompressed) {
+      console.error('[URL Decode] Decompression returned null/undefined')
+      return null
+    }
+    
+    console.log('[URL Decode] Successfully decompressed:', {
+      length: decompressed.length,
+      preview: decompressed.substring(0, 100) + '...'
+    })
+    
     return decompressed
   } catch (error) {
-    console.error('Failed to decode YAML from URL:', error)
+    console.error('[URL Decode] Failed to decode YAML from URL:', error)
     return null
   }
 }
@@ -47,14 +63,27 @@ export function updateURLWithYAML(yamlText) {
  * Get YAML data from current URL
  */
 export function getYAMLFromURL() {
-  const urlParams = new URLSearchParams(window.location.search)
-  const encoded = urlParams.get(URL_PARAM)
-  
-  if (encoded) {
-    return decodeYAMLFromURL(encoded)
+  try {
+    const urlParams = new URLSearchParams(window.location.search)
+    const encoded = urlParams.get(URL_PARAM)
+    
+    console.log('[URL Parse] Checking for config parameter:', {
+      hasParam: !!encoded,
+      url: window.location.href,
+      search: window.location.search
+    })
+    
+    if (encoded) {
+      console.log('[URL Parse] Found config parameter, decoding...')
+      return decodeYAMLFromURL(encoded)
+    }
+    
+    console.log('[URL Parse] No config parameter found')
+    return null
+  } catch (error) {
+    console.error('[URL Parse] Error parsing URL:', error)
+    return null
   }
-  
-  return null
 }
 
 /**

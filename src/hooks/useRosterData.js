@@ -35,13 +35,23 @@ export function useRosterData() {
       const urlYAML = getYAMLFromURL()
       
       if (urlYAML) {
+        console.log('[URL Load] Found config in URL, loading...', { 
+          length: urlYAML.length,
+          preview: urlYAML.substring(0, 50) + '...'
+        })
+        
         try {
           const parsedData = yaml.load(urlYAML)
+          console.log('[URL Load] Successfully parsed YAML from URL')
+          
           const validation = runAllValidators(parsedData)
           
           if (!validation.isValid) {
+            console.error('[URL Load] Validation failed:', validation.errors)
             setError({ type: 'validation', message: validation.errors })
           } else {
+            console.log('[URL Load] Validation passed, loading data from URL')
+            
             // Store original data for comparison
             setOriginalData(JSON.parse(JSON.stringify(parsedData)))
             
@@ -50,20 +60,33 @@ export function useRosterData() {
             } else {
               setData(parsedData)
             }
+            
+            // Clear localStorage since URL should take precedence
+            console.log('[URL Load] Clearing localStorage to ensure URL config takes priority')
+            clearLocalStorage()
           }
           
           setLoading(false)
           return
         } catch (err) {
-          console.error('Failed to load from URL:', err)
+          console.error('[URL Load] Failed to load from URL:', err)
+          console.error('[URL Load] Error details:', { 
+            name: err.name, 
+            message: err.message,
+            stack: err.stack 
+          })
           // Fall through to localStorage
         }
+      } else {
+        console.log('[URL Load] No config parameter found in URL, checking localStorage')
       }
       
       // If no URL data, load from localStorage
       const saved = loadFromLocalStorage()
       
       if (saved && saved.data) {
+        console.log('[LocalStorage Load] Found saved data in localStorage')
+        
         // saved.data contains the state object { data, originalData, hasGenerated, history }
         const state = saved.data
         
@@ -71,10 +94,13 @@ export function useRosterData() {
           const validation = runAllValidators(state.data)
           
           if (!validation.isValid) {
+            console.error('[LocalStorage Load] Validation failed:', validation.errors)
             setError({ type: 'validation', message: validation.errors })
           } else if (validation.hasWarnings) {
+            console.log('[LocalStorage Load] Validation passed with warnings')
             setData({ ...state.data, warnings: validation.warnings })
           } else {
+            console.log('[LocalStorage Load] Validation passed, loading data')
             setData(state.data)
           }
           
@@ -83,6 +109,8 @@ export function useRosterData() {
           if (state.hasGenerated !== undefined) setHasGenerated(state.hasGenerated)
           if (state.history) setHistory(state.history)
         }
+      } else {
+        console.log('[LocalStorage Load] No saved data found in localStorage')
       }
       
       setLoading(false)
