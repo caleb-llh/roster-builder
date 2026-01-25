@@ -1,0 +1,190 @@
+#################################
+#### Define the roster scope ####
+#################################
+
+# The roster period defines the date range for scheduling
+roster:
+  start_date: "2026-02-01"  # First day of the roster period
+  end_date: "2026-04-30"     # Last day of the roster period
+
+# Define all roles that need to be filled in events
+roles:
+  - name: lead      # Primary role - leads the event
+  - name: support   # Supporting role - assists the lead
+  - name: backup    # Backup role - covers when others are unavailable
+
+###########################
+#### Define the supply ####
+###########################
+
+# List all team members who can be assigned to events
+# Fields:
+#   id: unique identifier (used in constraints/preferences/events)
+#   name: full display name
+#   telegram: Telegram handle for notifications
+#   include: whether to include in automatic roster generation
+#   roles: list of roles this member can perform
+
+members:
+  - id: member-1
+    name: Alice Johnson
+    telegram: "@alice"
+    include: true    # Include in roster generation
+    roles:
+      - lead         # Can perform all three roles
+      - support
+      - backup
+  
+  - id: member-2
+    name: Bob Smith
+    telegram: "@bob"
+    include: true
+    roles:
+      - lead         # Can perform lead and support
+      - support
+  
+  - id: member-3
+    name: Charlie Davis
+    telegram: "@charlie"
+    include: true
+    roles:
+      - support      # Can perform support and backup
+      - backup
+  
+  - id: member-4
+    name: Diana Lee
+    telegram: "@diana"
+    include: true
+    roles:
+      - support
+      - backup
+  
+  - id: member-5
+    name: Ethan Brown
+    telegram: "@ethan"
+    include: false   # Not included in roster generation (inactive)
+    roles:
+      - backup
+
+###########################
+#### Define the demand ####
+###########################
+
+# List all events that need roster assignments
+# Fields:
+#   name: descriptive name of the event
+#   date: event date (YYYY-MM-DD format)
+#   day_of_week: day of the week
+#   reporting_time: when members should arrive (24-hour format HH:MM)
+#   roster: list of roles and assigned member IDs (leave member_id empty for unassigned)
+#   reminder: optional message sent to assigned members
+
+events:
+  - name: "Weekend Service"
+    date: "2026-02-07"
+    day_of_week: "Saturday"
+    reporting_time: "14:00"
+    roster:
+      - role: lead
+        member_id:           # Leave empty for automatic assignment
+      - role: support
+        member_id:
+    reminder: "Remember to arrive 30 minutes early."
+  
+  - name: "Weekend Service"
+    date: "2026-02-08"
+    day_of_week: "Sunday"
+    reporting_time: "09:00"
+    roster:
+      - role: lead
+        member_id: 
+      - role: support
+        member_id:
+    reminder: "Check equipment before starting."
+
+  - name: "Weekend Service"
+    date: "2026-02-14"
+    day_of_week: "Saturday"
+    reporting_time: "14:00"
+    roster:
+      - role: lead
+        member_id: 
+      - role: support
+        member_id:
+  
+  - name: "Weekend Service"
+    date: "2026-02-15"
+    day_of_week: "Sunday"
+    reporting_time: "09:00"
+    roster:
+      - role: lead
+        member_id: member-1  # Pre-assigned to member-1
+      - role: support
+        member_id:
+
+#########################################################
+#### Constraints at the roster level ####
+#########################################################
+
+# HARD constraints that MUST be fulfilled for valid assignments
+# The roster generator will never violate these rules
+
+roster_constraints:
+  ENFORCE_MEMBER_ROLES: true              # Members can only be assigned roles they can perform
+  ENFORCE_MEMBER_AVAILABILITY: true       # Members won't be assigned when unavailable
+  ONLY_ONCE_PER_EVENT: true               # A member can't be assigned multiple roles in one event
+  ONLY_ONCE_PER_WEEK: true                # A member can't be assigned multiple times in one week (Mon-Sun)
+  MAX_ASSIGNMENTS_PER_MONTH: 2            # Maximum number of assignments per member per month
+
+#########################################################
+#### Preferences at the roster level ####
+#########################################################  
+
+# SOFT preferences - the generator tries to satisfy these but may not always succeed
+# These help create fair and balanced rosters
+
+roster_preferences:
+  AVOID_CONSECUTIVE_WEEKS: true           # Try to avoid assigning members on back-to-back weekends
+  BALANCED_DAY_DISTRIBUTION: true         # Distribute assignments evenly across different days of the week
+  SPREAD_ASSIGNMENTS: true                # Spread assignments evenly across the entire roster period
+  DIVERSIFY_ROLE_ASSIGNMENTS: true        # Maximize variety - rotate different members through each role
+
+#####################################################################
+#### Constraints at the member level ####
+#####################################################################
+
+# Member-specific HARD constraints (override roster-level settings)
+# Use this to mark when members are unavailable
+# Formats:
+#   Single date: "YYYY-MM-DD"
+#   Date range:
+#     start: "YYYY-MM-DD"
+#     end: "YYYY-MM-DD"
+
+member_constraints: 
+  - member_id: member-2
+    unavailable_dates:
+      - "2026-02-14"         # Single unavailable date
+      - "2026-02-15"         # Another single date
+  
+  - member_id: member-3
+    unavailable_dates:
+      - start: "2026-02-21"  # Date range - unavailable from Feb 21-28
+        end: "2026-02-28"
+
+#########################################################
+#### Preferences at the member level ####
+#########################################################
+
+# Member-specific SOFT preferences
+# Use this to indicate preferred days for assignment
+# The generator will try to honor these when possible
+
+member_preferences: 
+  - member_id: member-1
+    days:
+      - Sunday             # Prefers Sunday assignments
+  
+  - member_id: member-4
+    days:
+      - Saturday           # Prefers Saturday assignments
