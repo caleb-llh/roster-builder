@@ -1,0 +1,102 @@
+import { useState } from 'react'
+import QualityMetrics from './QualityMetrics'
+
+export default function RosterStatsPanel({ stats, generationResult, members }) {
+  const [showDetails, setShowDetails] = useState(false)
+
+  if (!stats || stats.totalSlots === 0) {
+    return null
+  }
+
+  const { totalSlots, totalEvents, monthCount, avgSlotsPerEvent, avgSlotsPerMonth, avgSlotsPerMember, memberStats } = stats
+
+  return (
+    <div className="bg-white/40 backdrop-blur-md border border-white/30 rounded-lg shadow-lg p-4 mb-6">
+      <div className="flex items-center justify-between mb-2">
+        <h3 className="text-lg font-semibold text-gray-900">Roster Statistics</h3>
+        <button
+          onClick={() => setShowDetails(!showDetails)}
+          className="text-xs text-blue-600 hover:text-blue-800 font-medium"
+        >
+          {showDetails ? '▼ Hide Details' : '▶ Show Details'}
+        </button>
+      </div>
+
+      {/* Summary Stats */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
+        <div className="bg-blue-50/60 rounded-lg p-3 border border-blue-200/40">
+          <div className="text-xs text-gray-600 mb-1">Total Shifts Required</div>
+          <div className="text-2xl font-bold text-gray-900">{totalSlots}</div>
+          <div className="text-xs text-gray-500 mt-1">
+            Across {totalEvents} events over {monthCount} {monthCount === 1 ? 'month' : 'months'}
+          </div>
+        </div>
+
+        <div className="bg-green-50/60 rounded-lg p-3 border border-green-200/40">
+          <div className="text-xs text-gray-600 mb-1">Average Shifts Per Member</div>
+          <div className="text-2xl font-bold text-gray-900">{avgSlotsPerMember}
+            <span className="text-xs text-gray-500 mx-1 mt-1">
+                shifts/roster
+            </span>
+          </div>
+          <div className="text-xs text-gray-500 mt-1">
+            {Math.round(avgSlotsPerMember / monthCount * 10) / 10} shifts/month
+          </div>
+        </div>
+      </div>
+
+      {/* Detailed Stats - Show Generation Result if available, otherwise member workload */}
+      {showDetails && (
+        <div className="border-t border-gray-200 pt-3">
+          {generationResult ? (
+            <QualityMetrics 
+              generationResult={generationResult}
+              members={members}
+              stats={stats}
+              showRoleDiversity={true}
+              compact={true}
+            />
+          ) : (
+            <div>
+              <div className="text-sm font-semibold text-gray-700 mb-2">Member Workload Distribution</div>
+              <div className="space-y-2 max-h-64 overflow-y-auto">
+                {memberStats.map(member => (
+                  <div key={member.id} className="bg-gray-50/60 rounded px-3 py-2">
+                    <div className="flex items-center gap-2 text-sm">
+                      <span className="font-medium text-gray-900 min-w-[120px]">{member.name}</span>
+                      <div className="flex-1 flex items-center gap-2">
+                        <div className="flex-1 bg-gray-200 rounded-full h-2 overflow-hidden">
+                          <div 
+                            className="bg-blue-500 h-full transition-all"
+                            style={{ width: `${Math.min(member.percentageOfTotal, 100)}%` }}
+                          />
+                        </div>
+                        <span className="text-gray-600 min-w-[80px]">
+                          {member.totalAssignments} shifts
+                        </span>
+                        <span className="text-gray-500 text-xs min-w-[70px]">
+                          ({Math.round(member.avgPerMonth * 10) / 10}/month)
+                        </span>
+                      </div>
+                    </div>
+                    {member.uniqueRoles > 0 && (
+                      <div className="mt-1 ml-[120px] flex items-center gap-2 text-xs text-gray-500">
+                        <span>🎭 {member.uniqueRoles} {member.uniqueRoles === 1 ? 'role' : 'roles'}:</span>
+                        <span>
+                          {Object.entries(member.roleDistribution)
+                            .sort((a, b) => b[1] - a[1])
+                            .map(([role, count]) => `${role}(${count})`)
+                            .join(', ')}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}

@@ -1,0 +1,27 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  /* Improve mobile scrolling performance */
+  html {
+    -webkit-tap-highlight-color: rgba(0, 0, 0, 0);
+    -webkit-touch-callout: none;
+  }
+  
+  body {
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-y: contain;
+  }
+  
+  /* Better touch targets */
+  button, a {
+    touch-action: manipulation;
+  }
+  
+  /* Prevent text selection on UI controls only */
+  button, .no-select {
+    -webkit-user-select: none;
+    user-select: none;
+  }
+}

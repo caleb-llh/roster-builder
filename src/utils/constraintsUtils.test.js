@@ -1,0 +1,138 @@
+import { describe, it, expect } from 'vitest'
+import { 
+  isMemberUnavailable, 
+  getAvailableMembersForEvent 
+} from './constraintsUtils'
+
+describe('constraintsUtils', () => {
+  describe('isMemberUnavailable', () => {
+    const constraints = [
+      {
+        member_id: 'john',
+        unavailable_dates: [
+          '2026-02-14',
+          '2026-02-15',
+          { start: '2026-03-01', end: '2026-03-15' }
+        ]
+      },
+      {
+        member_id: 'jane',
+        unavailable_dates: ['2026-02-20']
+      }
+    ]
+
+    it('should return true for single date match', () => {
+      expect(isMemberUnavailable('john', '2026-02-14', constraints)).toBe(true)
+      expect(isMemberUnavailable('john', '2026-02-15', constraints)).toBe(true)
+    })
+
+    it('should return false for dates not in constraint list', () => {
+      expect(isMemberUnavailable('john', '2026-02-16', constraints)).toBe(false)
+    })
+
+    it('should return true for dates within range', () => {
+      expect(isMemberUnavailable('john', '2026-03-01', constraints)).toBe(true)
+      expect(isMemberUnavailable('john', '2026-03-08', constraints)).toBe(true)
+      expect(isMemberUnavailable('john', '2026-03-15', constraints)).toBe(true)
+    })
+
+    it('should return false for dates outside range', () => {
+      expect(isMemberUnavailable('john', '2026-02-28', constraints)).toBe(false)
+      expect(isMemberUnavailable('john', '2026-03-16', constraints)).toBe(false)
+    })
+
+    it('should return false for member with no constraints', () => {
+      expect(isMemberUnavailable('alice', '2026-02-14', constraints)).toBe(false)
+    })
+
+    it('should handle empty constraints array', () => {
+      expect(isMemberUnavailable('john', '2026-02-14', [])).toBe(false)
+    })
+
+    it('should handle null/undefined constraints', () => {
+      expect(isMemberUnavailable('john', '2026-02-14', null)).toBe(false)
+      expect(isMemberUnavailable('john', '2026-02-14', undefined)).toBe(false)
+    })
+  })
+
+  describe('getAvailableMembersForEvent', () => {
+    const members = [
+      { id: 'john', name: 'John', include: true, roles: ['vm', 'cam-1'] },
+      { id: 'jane', name: 'Jane', include: true, roles: ['vm'] },
+      { id: 'bob', name: 'Bob', include: false, roles: ['vm'] },
+      { id: 'alice', name: 'Alice', include: true, roles: ['cam-1'] }
+    ]
+
+    const constraints = [
+      {
+        member_id: 'john',
+        unavailable_dates: ['2026-02-14']
+      }
+    ]
+
+    const event = {
+      date: '2026-02-14',
+      roster: [
+        { role: 'vm', member_id: 'john' },
+        { role: 'cam-1', member_id: null }
+      ]
+    }
+
+    it('should return availability for all roster roles', () => {
+      const result = getAvailableMembersForEvent(event, members, constraints)
+      
+      expect(result).toHaveProperty('vm')
+      expect(result).toHaveProperty('cam-1')
+    })
+
+    it('should mark assigned member', () => {
+      const result = getAvailableMembersForEvent(event, members, constraints)
+      
+      const johnEntry = result.vm.find(m => m.id === 'john')
+      expect(johnEntry.assigned).toBe(true)
+    })
+
+    it('should mark unavailable members correctly', () => {
+      const result = getAvailableMembersForEvent(event, members, constraints)
+      
+      const johnEntry = result.vm.find(m => m.id === 'john')
+      expect(johnEntry.available).toBe(false) // John unavailable on 2026-02-14
+      
+      const janeEntry = result.vm.find(m => m.id === 'jane')
+      expect(janeEntry.available).toBe(true) // Jane has no constraints
+    })
+
+    it('should exclude members with include:false', () => {
+      const result = getAvailableMembersForEvent(event, members, constraints)
+      
+      const bobEntry = result.vm.find(m => m.id === 'bob')
+      expect(bobEntry).toBeUndefined() // Bob should be excluded
+    })
+
+    it('should only include qualified members', () => {
+      const result = getAvailableMembersForEvent(event, members, constraints)
+      
+      // Alice doesn't have 'vm' role
+      const aliceInVM = result.vm.find(m => m.id === 'alice')
+      expect(aliceInVM).toBeUndefined()
+      
+      // But Alice has 'cam-1' role
+      const aliceInCam = result['cam-1'].find(m => m.id === 'alice')
+      expect(aliceInCam).toBeDefined()
+    })
+
+    it('should handle event with no roster', () => {
+      const emptyEvent = { date: '2026-02-14', roster: [] }
+      const result = getAvailableMembersForEvent(emptyEvent, members, constraints)
+      
+      expect(Object.keys(result)).toHaveLength(0)
+    })
+
+    it('should handle event with undefined roster', () => {
+      const noRosterEvent = { date: '2026-02-14' }
+      const result = getAvailableMembersForEvent(noRosterEvent, members, constraints)
+      
+      expect(result).toEqual({})
+    })
+  })
+})
