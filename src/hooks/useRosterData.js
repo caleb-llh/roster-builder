@@ -6,7 +6,8 @@ import { getYAMLFromURL, updateURLWithYAML, clearYAMLFromURL } from '../utils/ur
 
 /**
  * Custom hook for managing roster data state and operations
- * Persists: data, originalData, hasGenerated, history
+ * URL configs are temporary (not saved to localStorage)
+ * Only explicitly imported configs are persisted
  */
 export function useRosterData() {
   const [data, setData] = useState(null)
@@ -15,26 +16,30 @@ export function useRosterData() {
   const [loading, setLoading] = useState(true)
   const [hasGenerated, setHasGenerated] = useState(false)
   const [history, setHistory] = useState([])
+  const [isFromURL, setIsFromURL] = useState(false) // Track if data is from URL
 
-  // Auto-save all state to localStorage when any changes
+  // Auto-save to localStorage only for explicitly imported data (not URL data)
   useEffect(() => {
-    if (data || originalData || history.length > 0) {
+    if (!isFromURL && (data || originalData || history.length > 0)) {
+      console.log('[Auto-save] Saving to localStorage')
       saveToLocalStorage({
         data,
         originalData,
         hasGenerated,
         history
       })
+    } else if (isFromURL && data) {
+      console.log('[Auto-save] Skipping localStorage save (data is from URL)')
     }
-  }, [data, originalData, hasGenerated, history])
+  }, [data, originalData, hasGenerated, history, isFromURL])
 
   // Load data on mount
   useEffect(() => {
     const loadData = async () => {
-      // First, try to load from URL (higher priority)
       const urlYAML = getYAMLFromURL()
       
       if (urlYAML) {
+        // Load from URL (temporary, not saved to localStorage)
         console.log('[URL Load] Found config in URL, loading...', { 
           length: urlYAML.length,
           preview: urlYAML.substring(0, 50) + '...'
@@ -50,9 +55,9 @@ export function useRosterData() {
             console.error('[URL Load] Validation failed:', validation.errors)
             setError({ type: 'validation', message: validation.errors })
           } else {
-            console.log('[URL Load] Validation passed, loading data from URL')
+            console.log('[URL Load] Validation passed, loading data from URL (temporary)')
             
-            // Store original data for comparison
+            setIsFromURL(true)
             setOriginalData(JSON.parse(JSON.stringify(parsedData)))
             
             if (validation.hasWarnings) {
@@ -61,8 +66,8 @@ export function useRosterData() {
               setData(parsedData)
             }
             
-            // Clear localStorage since URL should take precedence
-            console.log('[URL Load] Clearing localStorage to ensure URL config takes priority')
+            // Clear localStorage so URL takes precedence
+            console.log('[URL Load] Clearing localStorage - URL configs are temporary')
             clearLocalStorage()
           }
           
@@ -75,51 +80,18 @@ export function useRosterData() {
             message: err.message,
             stack: err.stack 
           })
-          // Fall through to localStorage
         }
-      } else {
-        console.log('[URL Load] No config parameter found in URL, checking localStorage')
       }
       
-      // If no URL data, load from localStorage
-      const saved = loadFromLocalStorage()
-      
-      if (saved && saved.data) {
-        console.log('[LocalStorage Load] Found saved data in localStorage')
-        
-        // saved.data contains the state object { data, originalData, hasGenerated, history }
-        const state = saved.data
-        
-        if (state.data) {
-          const validation = runAllValidators(state.data)
-          
-          if (!validation.isValid) {
-            console.error('[LocalStorage Load] Validation failed:', validation.errors)
-            setError({ type: 'validation', message: validation.errors })
-          } else if (validation.hasWarnings) {
-            console.log('[LocalStorage Load] Validation passed with warnings')
-            setData({ ...state.data, warnings: validation.warnings })
-          } else {
-            console.log('[LocalStorage Load] Validation passed, loading data')
-            setData(state.data)
-          }
-          
-          // Restore all persisted state
-          if (state.originalData) setOriginalData(state.originalData)
-          if (state.hasGenerated !== undefined) setHasGenerated(state.hasGenerated)
-          if (state.history) setHistory(state.history)
-        }
-      } else {
-        console.log('[LocalStorage Load] No saved data found in localStorage')
-      }
-      
+      // No URL config - start with clean slate
+      console.log('[Load] No URL config found - starting with empty state')
       setLoading(false)
     }
     
     loadData()
   }, [])
 
-  // Import YAML data
+  // Import YAML data (explicitly imported configs ARE saved to localStorage)
   const importData = async (yamlText) => {
     const parsedData = yaml.load(yamlText)
     const validation = runAllValidators(parsedData)
@@ -127,6 +99,9 @@ export function useRosterData() {
     if (!validation.isValid) {
       throw new Error(validation.errors.join('\n'))
     }
+    
+    // Mark as NOT from URL so it gets saved to localStorage
+    setIsFromURL(false)
     
     // Store original data for comparison
     setOriginalData(JSON.parse(JSON.stringify(parsedData)))
@@ -156,6 +131,7 @@ export function useRosterData() {
     setHasGenerated(false)
     setHistory([])
     setError(null)
+    setIsFromURL(false)
   }
 
   // Update events after generation

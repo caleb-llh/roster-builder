@@ -87,13 +87,16 @@ export default function YAMLImportModal({ onImport, onClose }) {
     setError(null)
     
     try {
-      const response = await fetch('/sample.yaml')
+      // Use import.meta.env.BASE_URL to handle GitHub Pages subdirectory
+      const basePath = import.meta.env.BASE_URL || '/'
+      const response = await fetch(`${basePath}sample.yaml`)
       if (!response.ok) throw new Error(`HTTP ${response.status}`)
       const text = await response.text()
       setYamlText(text)
       setError(null)
       setImporting(false)
     } catch (err) {
+      console.error('Failed to load sample:', err)
       setError({ type: 'load', message: 'Failed to load sample file' })
       setImporting(false)
     }

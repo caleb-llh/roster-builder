@@ -18,7 +18,29 @@ npm run dev                # Dev server → localhost:5173
 npm test                   # Run tests (190 passing)
 npm run test:coverage      # Coverage report
 npm run build              # Production build
+npm run preview            # Test production build locally
 ```
+
+## Development Workflow
+
+**Daily Development** (use 99% of the time):
+```bash
+npm run dev                # → http://localhost:5173 (no base path)
+```
+
+**Test Production Build** (before deploying):
+```bash
+npm run build              # Build with GitHub Pages config
+npm run preview            # → http://localhost:4173/roster-builder/ (with base path)
+```
+
+**Deploy to GitHub Pages**:
+```bash
+git add -A && git commit -m "Your message" && git push
+npm run deploy             # Deploys to https://caleb-llh.github.io/roster-builder/
+```
+
+> **Note**: The `/roster-builder/` base path only applies to production builds. Local dev runs without it.
 
 ## Architecture
 
