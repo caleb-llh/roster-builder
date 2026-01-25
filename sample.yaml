@@ -5,7 +5,7 @@
 # The roster period defines the date range for scheduling
 roster:
   start_date: "2026-02-01"  # First day of the roster period
-  end_date: "2026-04-30"     # Last day of the roster period
+  end_date: "2026-03-31"     # Last day of the roster period
 
 # Define all roles that need to be filled in events
 roles:
@@ -26,7 +26,7 @@ roles:
 #   roles: list of roles this member can perform
 
 members:
-  - id: member-1
+  - id: member-1-alice
     name: Alice Johnson
     telegram: "@alice"
     include: true    # Include in roster generation
@@ -35,7 +35,7 @@ members:
       - support
       - backup
   
-  - id: member-2
+  - id: member-2-bob
     name: Bob Smith
     telegram: "@bob"
     include: true
@@ -43,7 +43,7 @@ members:
       - lead         # Can perform lead and support
       - support
   
-  - id: member-3
+  - id: member-3-charlie
     name: Charlie Davis
     telegram: "@charlie"
     include: true
@@ -51,7 +51,7 @@ members:
       - support      # Can perform support and backup
       - backup
   
-  - id: member-4
+  - id: member-4-diana
     name: Diana Lee
     telegram: "@diana"
     include: true
@@ -59,7 +59,7 @@ members:
       - support
       - backup
   
-  - id: member-5
+  - id: member-5-ethan
     name: Ethan Brown
     telegram: "@ethan"
     include: false   # Not included in roster generation (inactive)
@@ -98,8 +98,6 @@ events:
     roster:
       - role: lead
         member_id: 
-      - role: support
-        member_id:
     reminder: "Check equipment before starting."
 
   - name: "Weekend Service"
@@ -118,8 +116,24 @@ events:
     reporting_time: "09:00"
     roster:
       - role: lead
-        member_id: member-1  # Pre-assigned to member-1
+        member_id: member-1-alice  # Pre-assigned to Alice
+  
+  - name: "Weekend Service"
+    date: "2026-02-28"
+    day_of_week: "Saturday"
+    reporting_time: "14:00"
+    roster:
+      - role: lead
+        member_id:
       - role: support
+        member_id:
+  
+  - name: "Weekend Service"
+    date: "2026-03-01"
+    day_of_week: "Sunday"
+    reporting_time: "09:00"
+    roster:
+      - role: lead
         member_id:
 
 #########################################################
@@ -150,7 +164,7 @@ roster_preferences:
   DIVERSIFY_ROLE_ASSIGNMENTS: true        # Maximize variety - rotate different members through each role
 
 #####################################################################
-#### Constraints at the member level ####
+#### Constraints at the member level (overrides roster level) ####
 #####################################################################
 
 # Member-specific HARD constraints (override roster-level settings)
@@ -162,29 +176,36 @@ roster_preferences:
 #     end: "YYYY-MM-DD"
 
 member_constraints: 
-  - member_id: member-2
+  - member_id: member-2-bob
     unavailable_dates:
       - "2026-02-14"         # Single unavailable date
       - "2026-02-15"         # Another single date
   
-  - member_id: member-3
+  - member_id: member-3-charlie
     unavailable_dates:
       - start: "2026-02-21"  # Date range - unavailable from Feb 21-28
         end: "2026-02-28"
+  
+  - member_id: member-4-diana
+    unavailable_dates:
+      - start: "2026-03-05"  # Date range - unavailable from Mar 5-10
+        end: "2026-03-10"
 
-#########################################################
-#### Preferences at the member level ####
-#########################################################
+##################################################################
+#### Preferences at the member level (overrides roster level) ####
+##################################################################
 
-# Member-specific SOFT preferences
+# Member-specific SOFT preferences (overrides roster-level settings)
 # Use this to indicate preferred days for assignment
 # The generator will try to honor these when possible
 
 member_preferences: 
-  - member_id: member-1
+  - member_id: member-1-alice
     days:
       - Sunday             # Prefers Sunday assignments
   
-  - member_id: member-4
+  - member_id: member-4-diana
     days:
       - Saturday           # Prefers Saturday assignments
+    roles:
+      - support            # Prefers support role
