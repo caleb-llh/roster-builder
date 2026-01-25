@@ -131,11 +131,13 @@ export default function QualityMetrics({ generationResult, members, stats, showR
               {stats.roleDiversity.roleStats
                 .sort((a, b) => b.uniqueMembers - a.uniqueMembers)
                 .map(roleStat => (
-                  <div key={roleStat.role} className="bg-white rounded p-2 text-xs flex justify-between items-center border border-gray-100">
-                    <span className="font-medium text-gray-900">{roleStat.role}</span>
-                    <div className="flex items-center gap-3">
-                      <span className="text-gray-600 font-medium">{roleStat.uniqueMembers} different members</span>
-                      <span className="text-gray-400">({roleStat.totalAssignments} assignments)</span>
+                  <div key={roleStat.role} className="bg-white rounded p-2.5 text-xs border border-gray-100">
+                    <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-1">
+                      <span className="font-medium text-gray-900">{roleStat.role}</span>
+                      <div className="flex items-center gap-2 text-[11px] sm:text-xs">
+                        <span className="text-gray-600 font-medium">{roleStat.uniqueMembers} different members</span>
+                        <span className="text-gray-400">({roleStat.totalAssignments} assignments)</span>
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -274,11 +276,13 @@ export default function QualityMetrics({ generationResult, members, stats, showR
               {stats.roleDiversity.roleStats
                 .sort((a, b) => b.uniqueMembers - a.uniqueMembers)
                 .map(roleStat => (
-                  <div key={roleStat.role} className="bg-gray-50 rounded p-2 text-xs flex justify-between items-center border border-gray-100">
-                    <span className="font-medium text-gray-900">{roleStat.role}</span>
-                    <div className="flex items-center gap-3">
-                      <span className="text-gray-600 font-medium">{roleStat.uniqueMembers} different members</span>
-                      <span className="text-gray-400">({roleStat.totalAssignments} assignments)</span>
+                  <div key={roleStat.role} className="bg-gray-50 rounded p-3 text-xs border border-gray-100">
+                    <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-1 sm:gap-3">
+                      <span className="font-medium text-gray-900">{roleStat.role}</span>
+                      <div className="flex items-center gap-2 text-[11px] sm:text-xs">
+                        <span className="text-gray-600 font-medium">{roleStat.uniqueMembers} different members</span>
+                        <span className="text-gray-400">({roleStat.totalAssignments} assignments)</span>
+                      </div>
                     </div>
                   </div>
                 ))}

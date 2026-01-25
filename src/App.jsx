@@ -282,7 +282,7 @@ function App() {
                     className="px-3 sm:px-4 py-2 sm:py-2.5 text-sm font-medium text-gray-700 bg-white/60 backdrop-blur-md border border-gray-300/50 rounded-lg shadow-md hover:bg-gray-50/80 active:bg-gray-100/80 transition-all touch-manipulation min-h-[44px]"
                     title="Copy shareable URL to clipboard"
                   >
-                    🔗 <span className="hidden sm:inline">Share</span>
+                    🔗 <span className="sm:inline">Share</span>
                   </button>
                   {showCopiedTooltip && (
                     <div className="absolute -bottom-8 left-1/2 transform -translate-x-1/2 px-2 py-1 bg-green-600 text-white text-xs rounded shadow-lg whitespace-nowrap">
@@ -298,7 +298,7 @@ function App() {
                 className="px-3 sm:px-4 py-2 sm:py-2.5 text-sm font-medium text-gray-700 bg-white/60 backdrop-blur-md border border-gray-300/50 rounded-lg shadow-md hover:bg-gray-50/80 active:bg-gray-100/80 transition-all touch-manipulation min-h-[44px]"
                 title="Import new data"
               >
-                📥 <span className="hidden sm:inline">Import</span><span className="sm:hidden">Import</span>
+                📥 <span className="sm:inline">Import</span><span className="sm:hidden">Import</span>
               </button>
               
               {/* Generation Buttons */}
@@ -308,7 +308,7 @@ function App() {
                   className="px-3 sm:px-4 py-2 sm:py-2.5 text-sm font-medium text-gray-700 bg-white/60 backdrop-blur-md border border-gray-300/50 rounded-lg shadow-md hover:bg-gray-50/80 active:bg-gray-100/80 transition-all touch-manipulation min-h-[44px]"
                   title="Undo last generation"
                 >
-                  ↶ <span className="hidden sm:inline">Undo</span>
+                  ↶ <span className="sm:inline">Undo</span>
                 </button>
               )}
               {hasUnassignedRoles && (
