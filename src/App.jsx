@@ -248,11 +248,12 @@ function App() {
             </div>
           </div>
         </div>
-        
+
+        {/* Import Modal for Landing Page */}
         {showImportModal && (
           <YAMLImportModal
             onImport={handleImport}
-            onClose={() => {}}
+            onClose={() => setShowImportModal(false)}
           />
         )}
       </>
