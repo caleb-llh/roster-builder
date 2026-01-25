@@ -1,0 +1,668 @@
+#################################
+#### Define the roster scope ####
+#################################
+
+roster:
+  start_date: "2026-02-01"
+  end_date: "2026-04-30"
+
+roles:
+  - name: multi-vm
+  - name: vm
+  - name: cam-1
+  - name: cam-2
+  - name: cam-3
+  - name: vm-understudy
+  - name: cam-understudy
+
+###########################
+#### Define the supply ####
+###########################
+
+### Fields:
+# id: unique identifier for the member (used in constraints/preferences/events)
+# name: display name of the member
+# telegram: Telegram handle of the member
+# include: whether to include the member in the roster generation
+# roles: list of roles the member can perform
+
+members:
+  - id: amanda
+    name: Amanda
+    telegram: "@amandakwek"
+    include: true
+    roles:
+      - vm
+      - cam-1
+      - cam-2
+      - cam-3
+  - id: caleb
+    name: Caleb
+    telegram: "@caleb_llh"
+    include: true
+    roles:
+      - multi-vm
+      - vm
+      - cam-1
+      - cam-2
+      - cam-3
+  - id: denise
+    name: Denise
+    telegram: "@oodeldoodle"
+    include: true
+    roles:
+      - vm
+      - cam-1
+      - cam-2
+      - cam-3
+  - id: grace
+    name: Grace
+    telegram: "@tgraceee"
+    include: true
+    roles:
+      - multi-vm
+      - vm
+      - cam-1
+      - cam-2
+      - cam-3
+  - id: isaac-matthew
+    name: Isaac Matthew
+    include: true
+    roles:
+      - multi-vm
+      - vm
+      - cam-1
+      - cam-2
+      - cam-3
+  - id: jason
+    name: Jason
+    telegram: "@jasonyolt"
+    include: true
+    roles:
+      - vm
+      - cam-1
+      - cam-2
+      - cam-3
+  - id: jia-lin
+    name: Jia Lin
+    telegram: "@jials"
+    include: true
+    roles:
+      - vm
+      - cam-1
+      - cam-2
+      - cam-3
+  - id: kate
+    name: Kate
+    telegram: "@katetannn"
+    include: false
+    roles:
+      - vm
+      - cam-1
+      - cam-2
+      - cam-3
+  - id: nanxin
+    name: Nanxin
+    telegram: "@Joyyy1996"
+    include: true
+    roles:
+      - vm
+      - cam-1
+      - cam-2
+      - cam-3
+  - id: ozborn
+    name: Ozborn
+    telegram: "@ozzy_p"
+    include: true
+    roles:
+      - vm
+      - cam-1
+      - cam-2
+      - cam-3
+  - id: paul
+    name: Paul
+    telegram: "@PL24351"
+    include: false
+    roles:
+      - cam-1
+      - cam-2
+      - cam-3
+  - id: rachael
+    name: Rachael
+    telegram: "@rachaelesther"
+    include: true
+    roles:
+      - cam-1
+      - cam-2
+      - cam-3
+  - id: rae
+    name: Rae
+    telegram: "@raelenehannah"
+    include: true
+    roles:
+      - multi-vm
+      - vm
+      - cam-1
+      - cam-2
+      - cam-3
+  - id: rasey
+    name: Rasey
+    telegram: "@runthegoodrase"
+    include: true
+    roles:
+      - vm
+      - cam-1
+      - cam-2
+      - cam-3
+  - id: ryan
+    name: Ryan
+    telegram: "@simmyboi"
+    include: true
+    roles:
+      - cam-1
+      - cam-2
+      - cam-3
+  - id: rystine
+    name: Rystine
+    telegram: "@rysttan"
+    include: true
+    roles:
+      - multi-vm
+      - vm
+      - cam-1
+      - cam-2
+      - cam-3
+  - id: su-fang
+    name: Su Fang
+    telegram: "@cuppacinobella"
+    include: true
+    roles:
+      - cam-1
+  - id: viv
+    name: Viv
+    telegram: "@vivttt"
+    include: true
+    roles:
+      - vm
+      - cam-1
+      - cam-2
+      - cam-3
+
+
+###########################
+#### Define the demand ####
+###########################
+
+### Fields:
+# name: descriptive name of the event
+# date: date of the event (YYYY-MM-DD)
+# day_of_week: day of the week of the event
+# reporting_time: time members should report (24-hour format HH:MM)
+# roster: list of roles and assigned member IDs
+# reminder: reminder message for the assigned members
+
+events:
+  - name: "Saturday Service"
+    date: "2026-02-07"
+    day_of_week: "Saturday"
+    reporting_time: "16:00"
+    roster:
+      - role: vm
+        member_id: 
+      - role: cam-1
+        member_id:
+    reminder: "vm remember to record Cam 1 on SD."
+  
+  - name: "Sunday Service"
+    date: "2026-02-08"
+    day_of_week: "Sunday"
+    reporting_time: "09:00"
+    roster:
+      - role: vm
+        member_id: 
+      - role: cam-1
+        member_id:
+    reminder: "vm remember to record PGM on SD."
+
+  - name: "Saturday Service"
+    date: "2026-02-14"
+    day_of_week: "Saturday"
+    reporting_time: "16:00"
+    roster:
+      - role: vm
+        member_id: 
+      - role: cam-1
+        member_id:
+    reminder: "vm remember to record Cam 1 on SD."
+  
+  - name: "Sunday Service"
+    date: "2026-02-15"
+    day_of_week: "Sunday"
+    reporting_time: "09:00"
+    roster:
+      - role: vm
+        member_id: 
+      - role: cam-1
+        member_id:
+    reminder: "vm remember to record PGM on SD."
+
+
+  - name: "Saturday Service"
+    date: "2026-02-21"
+    day_of_week: "Saturday"
+    reporting_time: "16:00"
+    roster:
+      - role: vm
+        member_id: 
+      - role: cam-1
+        member_id:
+    reminder: "vm remember to record Cam 1 on SD."
+
+  - name: "Sunday Service"
+    date: "2026-02-22"
+    day_of_week: "Sunday"
+    reporting_time: "09:00"
+    roster:
+      - role: vm
+        member_id: 
+      - role: cam-1
+        member_id:
+    reminder: "vm remember to record PGM on SD."
+
+  - name: "Final Saturday Service of the Month"
+    date: "2026-02-28"
+    day_of_week: "Saturday"
+    reporting_time: "15:30"
+    roster:
+      - role: multi-vm
+        member_id: 
+      - role: cam-1
+        member_id:
+      - role: cam-2
+        member_id:
+      - role: cam-3
+        member_id:
+    reminder: "multi-vm remember to record PGM during worship and Cam 1 during sermon on SD. cam-2 and cam-3 remember to wear black/dark clothing!"
+
+  - name: "Sunday Service"
+    date: "2026-03-01"
+    day_of_week: "Sunday"
+    reporting_time: "09:00"
+    roster:
+      - role: vm
+        member_id: 
+      - role: cam-1
+        member_id:
+    reminder: "vm remember to record PGM on SD."
+
+  - name: "Saturday Service"
+    date: "2026-03-07"
+    day_of_week: "Saturday"
+    reporting_time: "16:00"
+    roster:
+      - role: vm
+        member_id: 
+      - role: cam-1
+        member_id:
+    reminder: "vm remember to record Cam 1 on SD."
+
+  - name: "Sunday Service"
+    date: "2026-03-08"
+    day_of_week: "Sunday"
+    reporting_time: "09:00"
+    roster:
+      - role: vm
+        member_id:
+      - role: cam-1
+        member_id: 
+    reminder: "vm remember to record PGM on SD."
+
+  - name: "Saturday Service"
+    date: "2026-03-14"
+    day_of_week: "Saturday"
+    reporting_time: "16:00"
+    roster:
+      - role: vm
+        member_id: 
+      - role: cam-1
+        member_id:
+    reminder: "vm remember to record Cam 1 on SD."
+
+  - name: "Sunday Service"
+    date: "2026-03-15"
+    day_of_week: "Sunday"
+    reporting_time: "09:00"
+    roster:
+      - role: vm
+        member_id:
+      - role: cam-1
+        member_id:
+    reminder: "vm remember to record PGM on SD."
+
+  - name: "Saturday Service"
+    date: "2026-03-21"
+    day_of_week: "Saturday"
+    reporting_time: "16:00"
+    roster:
+      - role: vm
+        member_id: 
+      - role: cam-1
+        member_id:
+    reminder: "vm remember to record Cam 1 on SD."
+
+  - name: "Sunday Service"
+    date: "2026-03-22"
+    day_of_week: "Sunday"
+    reporting_time: "09:00"
+    roster:
+      - role: vm
+        member_id: 
+      - role: cam-1
+        member_id:
+    reminder: "vm remember to record PGM on SD."
+
+  - name: "Final Saturday Service of the Month"
+    date: "2026-03-28"
+    day_of_week: "Saturday"
+    reporting_time: "15:30"
+    roster:
+      - role: multi-vm
+        member_id:
+      - role: cam-1
+        member_id:
+      - role: cam-2
+        member_id:
+      - role: cam-3
+        member_id:
+    reminder: "multi-vm remember to record PGM during worship and Cam 1 during sermon on SD. cam-2 and cam-3 remember to wear black/dark clothing!"
+
+  - name: "Sunday Service"
+    date: "2026-03-29"
+    day_of_week: "Sunday"
+    reporting_time: "09:00"
+    roster:
+      - role: vm
+        member_id: 
+      - role: cam-1
+        member_id:
+    reminder: "vm remember to record PGM on SD."
+
+  - name: "Saturday Service"
+    date: "2026-04-04"
+    day_of_week: "Saturday"
+    reporting_time: "16:00"
+    roster:
+      - role: vm
+        member_id: 
+      - role: cam-1
+        member_id:
+    reminder: "vm remember to record Cam 1 on SD."
+
+  - name: "Sunday Service"
+    date: "2026-04-05"
+    day_of_week: "Sunday"
+    reporting_time: "09:00"
+    roster:
+      - role: vm
+        member_id: 
+      - role: cam-1
+        member_id:
+    reminder: "vm remember to record PGM on SD."
+
+  - name: "Saturday Service"
+    date: "2026-04-11"
+    day_of_week: "Saturday"
+    reporting_time: "16:00"
+    roster:
+      - role: vm
+        member_id: 
+      - role: cam-1
+        member_id:
+    reminder: "vm remember to record Cam 1 on SD."
+
+  - name: "Sunday Service"
+    date: "2026-04-12"
+    day_of_week: "Sunday"
+    reporting_time: "09:00"
+    roster:
+      - role: vm
+        member_id: 
+      - role: cam-1
+        member_id:
+    reminder: "vm remember to record PGM on SD."
+
+  - name: "Saturday Service"
+    date: "2026-04-18"
+    day_of_week: "Saturday"
+    reporting_time: "16:00"
+    roster:
+      - role: vm
+        member_id: 
+      - role: cam-1
+        member_id:
+    reminder: "vm remember to record Cam 1 on SD."
+
+  - name: "Sunday Service"
+    date: "2026-04-19"
+    day_of_week: "Sunday"
+    reporting_time: "09:00"
+    roster:
+      - role: vm
+        member_id: 
+      - role: cam-1
+        member_id:
+    reminder: "vm remember to record PGM on SD."
+
+  - name: "Final Saturday Service of the Month"
+    date: "2026-04-25"
+    day_of_week: "Saturday"
+    reporting_time: "15:30"
+    roster:
+      - role: multi-vm
+        member_id:
+      - role: cam-1
+        member_id:
+      - role: cam-2
+        member_id:
+      - role: cam-3
+        member_id:
+    reminder: "multi-vm remember to record PGM during worship and Cam 1 during sermon on SD. cam-2 and cam-3 remember to wear black/dark clothing!"
+
+  - name: "Sunday Service"
+    date: "2026-04-26"
+    day_of_week: "Sunday"
+    reporting_time: "09:00"
+    roster:
+      - role: vm
+        member_id: 
+      - role: cam-1
+        member_id:
+    reminder: "vm remember to record PGM on SD."
+
+#########################################################
+#### Constraints at the roster level ####
+#########################################################
+
+# HARD constraints that must be fulfilled
+roster_constraints:
+  ENFORCE_MEMBER_ROLES: true # members are only rostered for roles they can perform
+  ENFORCE_MEMBER_AVAILABILITY: true # members are only rostered for dates they are available
+  ONLY_ONCE_PER_EVENT: true # not rostered on the same event
+  ONLY_ONCE_PER_WEEK: true # not rostered on the same week(end) - week starts on Monday
+  MAX_ASSIGNMENTS_PER_MONTH: 2 # number of assignments per month
+
+#########################################################
+#### Preferences at the roster level ####
+#########################################################  
+
+# SOFT preferences not guaranteed to be fulfilled, best-effort basis
+roster_preferences:
+  AVOID_CONSECUTIVE_WEEKS: true # avoid consecutive weekends
+  BALANCED_DAY_DISTRIBUTION: true # balance number of assignments across different days of week (e.g. sundays and saturdays)
+  SPREAD_ASSIGNMENTS: true # spread assignments evenly across the roster period
+  DIVERSIFY_ROLE_ASSIGNMENTS: true # maximize variety - assign different members to each role
+
+
+
+#####################################################################
+#### Constraints at the member level (overrides roster level) ####
+#####################################################################
+# Fields:
+# member_id: unique identifier for the member (matches members.id)
+# unavailable_dates: list of dates or date ranges the member is unavailable
+#   - single date: "YYYY-MM-DD"
+#   - date range:
+#       start: "YYYY-MM-DD"
+#       end: "YYYY-MM-DD"
+
+# HARD constraints that must be fulfilled
+member_constraints: 
+  - member_id: nanxin
+    unavailable_dates:
+      - "2026-01-31"
+      - "2026-02-01"
+      - start: "2026-02-28"
+        end: "2026-03-15"
+      - "2026-04-18"
+      - "2026-04-19"
+  
+  - member_id: denise
+    unavailable_dates:
+      - "2026-02-14"
+      - "2026-02-15"
+      - "2026-02-21"
+      - "2026-03-14"
+  
+  - member_id: grace
+    unavailable_dates:
+      - start: "2026-02-07"
+        end: "2026-02-28"
+      - "2026-03-01"
+      - "2026-04-11"
+      - "2026-04-12"
+  
+  - member_id: isaac-matthew
+    unavailable_dates:
+      - "2026-02-08"
+      - "2026-04-11"
+      - "2026-04-12"
+  
+  - member_id: rystine
+    unavailable_dates:
+      - "2026-02-15"
+      - "2026-03-15"
+      - "2026-04-12"
+  
+  - member_id: jia-lin
+    unavailable_dates:
+      - "2026-01-31"
+      - "2026-02-01"
+      - "2026-02-14"
+      - "2026-03-15"
+    note: "Might be travelling in Mar-Apr but can't confirm now"
+  
+  - member_id: jason
+    unavailable_dates:
+      - "2026-02-22"
+      - "2026-04-11"
+  
+  - member_id: ryan
+    unavailable_dates:
+      - "2026-02-07"
+      - "2026-02-14"
+      - "2026-02-15"
+      - "2026-02-22"
+      - start: "2026-03-14"
+        end: "2026-03-29"
+      - "2026-04-11"
+      - "2026-04-12"
+  
+  - member_id: su-fang
+    unavailable_dates:
+      - start: "2026-02-01"
+        end: "2026-02-21"
+      - "2026-03-21"
+      - "2026-03-22"
+  
+  - member_id: rachael
+    unavailable_dates:
+      - "2026-02-21"
+      - "2026-03-21"
+  
+  - member_id: rasey
+    unavailable_dates:
+      - "2026-02-01"  # First Saturday of Feb
+      - "2026-02-14"
+      - "2026-03-07"  # First Saturday of Mar
+      - "2026-04-04"  # First Saturday of Apr
+  
+  - member_id: viv
+    unavailable_dates:
+      - "2026-02-01"
+      - "2026-02-15"
+      - "2026-03-01"
+      - "2026-03-08"
+      - "2026-03-15"
+      - "2026-03-21"
+      - "2026-03-22"
+      - "2026-03-28"
+      - "2026-03-29"
+  
+  - member_id: ozborn
+    unavailable_dates:
+      - "2026-02-14"
+      - "2026-02-15"
+      - "2026-02-28"
+      - "2026-03-01"
+      - "2026-03-07"
+      - "2026-03-08"
+      - "2026-03-15"
+      - "2026-04-18"
+  
+  - member_id: amanda
+    unavailable_dates:
+      - start: "2026-02-01"
+        end: "2026-02-28"
+      - "2026-03-28"
+      - "2026-03-29"
+      - "2026-04-04"
+  
+  - member_id: rae
+    unavailable_dates:
+      - "2026-02-14"
+      - "2026-02-15"
+      - "2026-03-07"
+      - "2026-03-08"
+      - "2026-03-21"
+      - "2026-03-22"
+      - "2026-03-28"
+      - "2026-03-29"
+      - "2026-04-04"
+      - "2026-04-05"
+
+  - member_id: caleb
+    unavailable_dates:
+      - "2026-02-07"
+      - "2026-02-08"
+      - "2026-03-07"
+      - "2026-03-08"
+      - "2026-03-14"
+      - "2026-03-15"
+      - "2026-04-04"
+      - "2026-04-05"
+      - "2026-04-11"
+      - "2026-04-12"
+
+#########################################################
+#### Preferences at the member level (overrides roster level) ####
+#########################################################
+
+# Fields:
+# member_id: unique identifier for the member (matches members.id)
+# days: list of preferred days to be rostered on
+
+# SOFT preferences not guaranteed to be fulfilled, best-effort basis
+member_preferences: 
+  - member_id: rystine
+    days:
+      - Sunday
