@@ -275,13 +275,15 @@ events:
     reporting_time: "15:30"
     roster:
       - role: multi-vm
-        member_id: 
+        member_id: isaac-matthew
       - role: cam-1
         member_id:
       - role: cam-2
-        member_id:
+        member_id: 
       - role: cam-3
         member_id:
+      - role: vm-understudy
+        member_id: rasey
     reminder: "multi-vm remember to record PGM during worship and Cam 1 during sermon on SD. cam-2 and cam-3 remember to wear black/dark clothing!"
 
   - name: "Sunday Service"
@@ -367,13 +369,15 @@ events:
     reporting_time: "15:30"
     roster:
       - role: multi-vm
-        member_id:
+        member_id: rasey
       - role: cam-1
         member_id:
       - role: cam-2
         member_id:
       - role: cam-3
         member_id:
+      - role: vm-understudy
+        member_id: grace
     reminder: "multi-vm remember to record PGM during worship and Cam 1 during sermon on SD. cam-2 and cam-3 remember to wear black/dark clothing!"
 
   - name: "Sunday Service"
@@ -459,13 +463,15 @@ events:
     reporting_time: "15:30"
     roster:
       - role: multi-vm
-        member_id:
+        member_id: grace
       - role: cam-1
         member_id:
       - role: cam-2
         member_id:
       - role: cam-3
-        member_id:
+        member_id: ryan
+      - role: vm-understudy
+        member_id: jia-lin
     reminder: "multi-vm remember to record PGM during worship and Cam 1 during sermon on SD. cam-2 and cam-3 remember to wear black/dark clothing!"
 
   - name: "Sunday Service"
