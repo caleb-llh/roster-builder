@@ -83,7 +83,7 @@ export default function QualityMetrics({ generationResult, members, stats, showR
         <div>
           <div className="text-sm font-semibold text-gray-700 mb-2">📈 Shift Distribution Chart</div>
           <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg p-4 border border-blue-200/40">
-            <BellCurveChart sortedDistribution={sortedDistribution} maxMemberCount={maxMemberCount} />
+            <BellCurveChart sortedDistribution={sortedDistribution} maxMemberCount={maxMemberCount} members={members} />
             <div className="text-center text-xs text-gray-500 mt-2">
               Shifts per member (Avg: {averageShifts})
             </div>
@@ -199,7 +199,7 @@ export default function QualityMetrics({ generationResult, members, stats, showR
             </div>
             
             <div className="bg-white rounded-lg p-3 mb-3">
-              <BellCurveChart sortedDistribution={sortedDistribution} maxMemberCount={maxMemberCount} />
+              <BellCurveChart sortedDistribution={sortedDistribution} maxMemberCount={maxMemberCount} members={members} />
               <div className="text-center text-xs text-gray-500 mt-2">
                 Shifts per member
               </div>

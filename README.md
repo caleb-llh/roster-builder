@@ -73,18 +73,33 @@ const period = data[YAML_FIELDS.ROSTER_PERIOD]  // Gets data.roster
 
 ### Generation Algorithm
 
-**Greedy algorithm with weighted scoring**:
+**Greedy algorithm with multi-start optimization**:
 
-1. Load existing assignments into `AssignmentTracker` (tracks state per member/week/month)
-2. Process events chronologically
-3. For each unassigned role:
-   - `EligibilityChecker`: Filter by hard constraints (must pass)
-   - `ScoringEngine`: Score by soft preferences (fairness, spread, day prefs)
-   - Assign best-scored member
-   - Update tracker
+1. **Multi-Start Optimization** (20 runs by default):
+   - Rotates starting point through chronologically sorted events
+   - Each run begins at a different event position
+   - Generate complete roster for each variation
+   - Score each result using weighted quality metrics
+   - Select best solution across all runs
+
+2. **Single Run Process**:
+   - Calculate member availability (prioritize members with fewer available dates)
+   - Load existing assignments into `AssignmentTracker`
+   - Process events from the assigned starting point
+   - For each unassigned role:
+     - `EligibilityChecker`: Filter by hard constraints (must pass)
+     - `ScoringEngine`: Score by soft preferences (availability, fairness, spread, day prefs)
+     - Assign best-scored member
+     - Update tracker
+
+**Why Multi-Start?** Greedy algorithms can get trapped in local optima. By trying different starting positions, we explore multiple solution paths and pick the best result. This is deterministic - same input always produces same output.
+
+**Availability Prioritization**: Members with more unavailable dates are scored higher, ensuring they get assigned to events they can attend before slots fill up.
+
+**Quality Scoring**: Combines availability, fairness (assignment balance), spread (time spacing), and preference violations with weighted penalties matching the scoring engine weights.
 
 **Hard Constraints**: Role qualification, availability, frequency limits
-**Soft Preferences**: Fairness, assignment spread, consecutive weekends, day balance, role diversity
+**Soft Preferences**: Availability (prioritize constrained members), fairness, assignment spread, consecutive weekends, day balance, role diversity
 
 See `src/utils/rosterGenerator/README.md` for scoring weights and details.
 

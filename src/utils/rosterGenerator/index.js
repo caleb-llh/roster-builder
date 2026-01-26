@@ -1,25 +1,110 @@
 /**
- * Roster Generation Algorithm
+ * Roster Generation Algorithm with Multi-Start Optimization
  * 
  * Generates assignments for unassigned roles using a greedy algorithm with weighted scoring.
+ * Uses multi-start optimization to explore different solution paths and select the best result.
  * 
  * Process:
- * 1. Initialize tracking of existing assignments
- * 2. Process events chronologically
- * 3. For each unassigned role:
- *    - Find eligible members (satisfy hard constraints)
- *    - Score eligible members (optimize for preferences)
- *    - Assign best-scored member
- *    - Update tracking
+ * 1. Run multiple generations with varied event/member ordering (deterministic)
+ * 2. Score each result using weighted quality metrics
+ * 3. Select and return the best solution
+ * 4. Each generation:
+ *    - Initialize tracking of existing assignments
+ *    - Process events chronologically
+ *    - For each unassigned role:
+ *      - Find eligible members (satisfy hard constraints)
+ *      - Score eligible members (optimize for preferences)
+ *      - Assign best-scored member
+ *      - Update tracking
  * 
- * Returns: New events array with filled assignments
+ * Returns: Best result from all runs with quality metrics
  */
 
 import { AssignmentTracker } from './assignmentTracker'
 import { EligibilityChecker } from './eligibilityChecker'
 import { ScoringEngine } from './scoringEngine'
 
+/**
+ * Main entry point with multi-start optimization
+ */
 export function generateRoster(
+  events,
+  members,
+  memberConstraints,
+  memberPreferences,
+  rosterConstraints,
+  rosterPreferences,
+  rosterPeriod,
+  options = {}
+) {
+  const { multiStart = true, runs = 20 } = options
+  
+  if (!multiStart || runs <= 1) {
+    // Single run mode
+    return generateRosterSingleRun(
+      events,
+      members,
+      memberConstraints,
+      memberPreferences,
+      rosterConstraints,
+      rosterPreferences,
+      rosterPeriod
+    )
+  }
+  
+  // Multi-start optimization
+  const results = []
+  
+  for (let run = 0; run < runs; run++) {
+    // Vary event and member ordering deterministically
+    const eventOrder = getEventOrderForRun(events, run)
+    const memberOrder = getMemberOrderForRun(members, run)
+    
+    // Generate with these variations
+    const result = generateRosterSingleRun(
+      eventOrder,
+      memberOrder,
+      memberConstraints,
+      memberPreferences,
+      rosterConstraints,
+      rosterPreferences,
+      rosterPeriod
+    )
+    
+    // Restore chronological event order
+    result.events.sort((a, b) => new Date(a.date) - new Date(b.date))
+    
+    // Calculate quality score for comparison
+    const quality = calculateRosterQuality(result, memberPreferences)
+    
+    results.push({
+      ...result,
+      quality,
+      runNumber: run
+    })
+  }
+  
+  // Select best result
+  results.sort((a, b) => b.quality - a.quality)
+  const best = results[0]
+  
+  // Add multi-start metadata
+  best.stats.multiStartInfo = {
+    totalRuns: runs,
+    bestRun: best.runNumber,
+    qualityRange: {
+      best: results[0].quality.toFixed(2),
+      worst: results[results.length - 1].quality.toFixed(2)
+    }
+  }
+  
+  return best
+}
+
+/**
+ * Single generation run (core algorithm)
+ */
+function generateRosterSingleRun(
   events,
   members,
   memberConstraints,
@@ -32,6 +117,10 @@ export function generateRoster(
   const tracker = new AssignmentTracker(members, events, rosterPeriod)
   const eligibilityChecker = new EligibilityChecker(members, memberConstraints, rosterConstraints, tracker)
   const scoringEngine = new ScoringEngine(rosterPreferences, memberPreferences, tracker)
+  
+  // Calculate member availability (count how many events each member is available for)
+  const memberAvailability = calculateMemberAvailability(members, memberConstraints, events)
+  scoringEngine.setMemberAvailability(memberAvailability)
   
   // Clone events to avoid mutating original
   const newEvents = JSON.parse(JSON.stringify(events))
@@ -127,7 +216,8 @@ export function previewRosterGeneration(
     memberPreferences,
     rosterConstraints,
     rosterPreferences,
-    rosterPeriod
+    rosterPeriod,
+    { multiStart: false } // Single run for preview
   )
   
   return {
@@ -137,3 +227,94 @@ export function previewRosterGeneration(
     warnings: result.stats.unassignableRoles
   }
 }
+
+/**
+ * Deterministically vary event processing order for each run
+ * Rotates the starting point through the chronologically sorted events
+ */
+function getEventOrderForRun(events, runNumber) {
+  const sorted = [...events].sort((a, b) => new Date(a.date) - new Date(b.date))
+  
+  if (sorted.length === 0) return sorted
+  
+  // Rotate start point: each run starts at a different event position
+  const startIndex = runNumber % sorted.length
+  
+  // Rotate array: [start..end, 0..start-1]
+  return [...sorted.slice(startIndex), ...sorted.slice(0, startIndex)]
+}
+
+/**
+ * Deterministically vary member priority for tie-breaking
+ */
+function getMemberOrderForRun(members, runNumber) {
+  return members.map((m, i) => ({
+    ...m,
+    _priority: (i + runNumber * 7) % members.length
+  })).sort((a, b) => a._priority - b._priority)
+}
+
+/**
+ * Calculate overall roster quality score (higher is better)
+ */
+function calculateRosterQuality(result, memberPreferences) {
+  const { fairnessMetrics, stats, events } = result
+  
+  // Count preference violations
+  let dayPrefViolations = 0
+  let rolePrefViolations = 0
+  
+  events.forEach(event => {
+    event.roster?.forEach(assignment => {
+      if (assignment.member_id) {
+        const memberPref = memberPreferences?.find(p => p.member_id === assignment.member_id)
+        
+        if (memberPref?.days && !memberPref.days.includes(event.day_of_week)) {
+          dayPrefViolations++
+        }
+        
+        if (memberPref?.roles && !memberPref.roles.includes(assignment.role)) {
+          rolePrefViolations++
+        }
+      }
+    })
+  })
+  
+  // Weight-based penalty (lower cost = better quality)
+  // Using same weights as scoring engine to penalize violations
+  const cost = 
+    fairnessMetrics.assignmentStdDev * 100 +    // fairness weight
+    fairnessMetrics.spreadStdDev * 50 +          // spread weight
+    dayPrefViolations * 150 +                    // dayPreference weight
+    rolePrefViolations * 120 +                   // rolePreference weight
+    stats.unassignableRoles.length * 1000        // Heavily penalize unassignable roles
+  
+  // Return negative cost (so higher = better)
+  return -cost
+}
+
+/**
+ * Calculate how many events each member is available for
+ * Lower availability = more unavailable dates = higher priority
+ */
+function calculateMemberAvailability(members, memberConstraints, events) {
+  const availability = {}
+  
+  members.forEach(member => {
+    const memberConstraint = memberConstraints.find(c => c.member_id === member.id)
+    const unavailableDates = memberConstraint?.unavailable_dates || []
+    
+    // Count how many events this member is available for
+    let availableCount = 0
+    events.forEach(event => {
+      if (!unavailableDates.includes(event.date)) {
+        availableCount++
+      }
+    })
+    
+    availability[member.id] = availableCount
+  })
+  
+  return availability
+}
+

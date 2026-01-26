@@ -63,7 +63,8 @@ describe('Roster Generator', () => {
         [],
         rosterConstraints,
         rosterPreferences,
-        rosterPeriod
+        rosterPeriod,
+        { multiStart: false } // Single run for basic test
       )
 
       expect(result.events[0].roster[0].member_id).toBeTruthy()
@@ -83,7 +84,8 @@ describe('Roster Generator', () => {
         [],
         rosterConstraints,
         rosterPreferences,
-        rosterPeriod
+        rosterPeriod,
+        { multiStart: false }
       )
 
       expect(result.events[0].roster[0].member_id).toBe('alice')
@@ -452,12 +454,111 @@ describe('Roster Generator', () => {
         preferences,
         { ...rosterConstraints, MAX_ASSIGNMENTS_PER_MONTH: 5 },
         rosterPreferences,
-        rosterPeriod
+        rosterPeriod,
+        { multiStart: false }
       )
 
       // Alice has both day (Saturday) and role (support) preferences
       // She should be strongly preferred with combined preference bonus
       expect(result.events[0].roster[0].member_id).toBe('alice')
+    })
+  })
+
+  describe('Multi-Start Optimization', () => {
+    it('should run multiple generations and select best', () => {
+      const members = createTestMembers()
+      const events = createTestEvents()
+      
+      const result = generateRoster(
+        events,
+        members,
+        [],
+        [],
+        rosterConstraints,
+        rosterPreferences,
+        rosterPeriod,
+        { multiStart: true, runs: 5 }
+      )
+
+      expect(result.stats.multiStartInfo).toBeDefined()
+      expect(result.stats.multiStartInfo.totalRuns).toBe(5)
+      expect(result.stats.multiStartInfo.bestRun).toBeGreaterThanOrEqual(0)
+      expect(result.stats.multiStartInfo.bestRun).toBeLessThan(5)
+      expect(result.events[0].roster[0].member_id).toBeTruthy()
+    })
+
+    it('should produce deterministic results with same input', () => {
+      const members = createTestMembers()
+      const events = createTestEvents()
+      
+      const result1 = generateRoster(
+        events,
+        members,
+        [],
+        [],
+        rosterConstraints,
+        rosterPreferences,
+        rosterPeriod,
+        { multiStart: true, runs: 3 }
+      )
+
+      const result2 = generateRoster(
+        events,
+        members,
+        [],
+        [],
+        rosterConstraints,
+        rosterPreferences,
+        rosterPeriod,
+        { multiStart: true, runs: 3 }
+      )
+
+      // Same input should produce same output
+      expect(result1.stats.multiStartInfo.bestRun).toBe(result2.stats.multiStartInfo.bestRun)
+      expect(result1.events[0].roster[0].member_id).toBe(result2.events[0].roster[0].member_id)
+    })
+
+    it('should default to multi-start when no options provided', () => {
+      const members = createTestMembers()
+      const events = createTestEvents()
+      
+      const result = generateRoster(
+        events,
+        members,
+        [],
+        [],
+        rosterConstraints,
+        rosterPreferences,
+        rosterPeriod
+        // No options = default multiStart: true, runs: 10
+      )
+
+      expect(result.stats.multiStartInfo).toBeDefined()
+      expect(result.stats.multiStartInfo.totalRuns).toBe(20)
+    })
+
+    it('should maintain chronological order in final result', () => {
+      const members = createTestMembers()
+      const events = [
+        { ...createTestEvents()[0], date: '2026-02-15' },
+        { ...createTestEvents()[1], date: '2026-02-01' },
+        { ...createTestEvents()[0], date: '2026-02-22' }
+      ]
+      
+      const result = generateRoster(
+        events,
+        members,
+        [],
+        [],
+        rosterConstraints,
+        rosterPreferences,
+        rosterPeriod,
+        { multiStart: true, runs: 3 }
+      )
+
+      // Events should be returned in chronological order
+      expect(new Date(result.events[0].date) <= new Date(result.events[1].date)).toBe(true)
+      expect(new Date(result.events[1].date) <= new Date(result.events[2].date)).toBe(true)
     })
   })
 })
