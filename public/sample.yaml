@@ -83,7 +83,7 @@ events:
   - name: "Weekend Service"
     date: "2026-02-07"
     day_of_week: "Saturday"
-    reporting_time: "14:00"
+    reporting_time: "2:00 PM"
     roster:
       - role: lead
         member_id:           # Leave empty for automatic assignment
@@ -94,7 +94,7 @@ events:
   - name: "Weekend Service"
     date: "2026-02-08"
     day_of_week: "Sunday"
-    reporting_time: "09:00"
+    reporting_time: "9:00 AM"
     roster:
       - role: lead
         member_id: 
@@ -103,7 +103,7 @@ events:
   - name: "Weekend Service"
     date: "2026-02-14"
     day_of_week: "Saturday"
-    reporting_time: "14:00"
+    reporting_time: "2:00 PM"
     roster:
       - role: lead
         member_id: 
@@ -113,7 +113,7 @@ events:
   - name: "Weekend Service"
     date: "2026-02-15"
     day_of_week: "Sunday"
-    reporting_time: "09:00"
+    reporting_time: "9:00 AM"
     roster:
       - role: lead
         member_id: member-1-alice  # Pre-assigned to Alice
@@ -121,7 +121,7 @@ events:
   - name: "Weekend Service"
     date: "2026-02-28"
     day_of_week: "Saturday"
-    reporting_time: "14:00"
+    reporting_time: "2:00 PM"
     roster:
       - role: lead
         member_id:
@@ -131,7 +131,7 @@ events:
   - name: "Weekend Service"
     date: "2026-03-01"
     day_of_week: "Sunday"
-    reporting_time: "09:00"
+    reporting_time: "9:00 AM"
     roster:
       - role: lead
         member_id:
