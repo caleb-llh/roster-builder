@@ -1,8 +1,10 @@
 import { useState } from 'react'
 import { getAvailableMembersForEvent } from '../utils/constraintsUtils'
 import { getCardColorForDay, formatDate } from '../utils/colorUtils'
+import { exportToYAML, downloadYAML } from '../utils/dataExport'
+import { YAML_FIELDS } from '../schema/rosterSchema'
 
-export default function EventsView({ events, members, memberConstraints, roleColorMap, searchQuery, validationResults, roles, originalData, hasGenerated, onViewDiff }) {
+export default function EventsView({ events, members, memberConstraints, roleColorMap, searchQuery, validationResults, roles, originalData, hasGenerated, onViewDiff, yamlData }) {
   const [expandedEvent, setExpandedEvent] = useState(null)
   const [viewMode, setViewMode] = useState('cards') // 'cards' or 'table'
   
@@ -132,6 +134,17 @@ export default function EventsView({ events, members, memberConstraints, roleCol
     }
   }
 
+  // Export to YAML
+  const exportYAML = () => {
+    try {
+      const yamlString = exportToYAML(yamlData)
+      const filename = `roster_${new Date().toISOString().split('T')[0]}.yaml`
+      downloadYAML(yamlString, filename)
+    } catch (err) {
+      alert(`Failed to export YAML: ${err.message}`)
+    }
+  }
+
   return (
     <div className="p-4 sm:p-6">
       <div className="mb-4 sm:mb-6">
@@ -184,6 +197,14 @@ export default function EventsView({ events, members, memberConstraints, roleCol
             title="Download as CSV file"
           >
             💾 <span className="hidden xs:inline">Export </span>CSV
+          </button>
+
+          <button
+            onClick={exportYAML}
+            className="px-3 sm:px-4 py-2 rounded-lg font-medium text-xs sm:text-sm bg-white/60 text-gray-700 hover:bg-white/80 active:bg-white border border-gray-200 shadow-md transition-all touch-manipulation min-h-[44px]"
+            title="Download as YAML file"
+          >
+            📄 <span className="hidden xs:inline">Export </span>YAML
           </button>
 
         </div>

@@ -409,6 +409,7 @@ function App() {
             originalData={originalData}
             hasGenerated={hasGenerated}
             onViewDiff={handleViewDiff}
+            yamlData={data}
           />
         </div>
       </div>
