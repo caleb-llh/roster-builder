@@ -6,6 +6,7 @@ const CATEGORY_LABEL = {
   generation: 'gen',
   swap: 'swap',
   update: 'update',
+  replace: 'replace',
   delete: 'delete',
   insert: 'insert',
 }
@@ -14,6 +15,7 @@ const CATEGORY_STYLE = {
   generation: 'bg-blue-100 text-blue-700',
   swap: 'bg-purple-100 text-purple-700',
   update: 'bg-amber-100 text-amber-700',
+  replace: 'bg-amber-100 text-amber-700',
   delete: 'bg-red-100 text-red-700',
   insert: 'bg-green-100 text-green-700',
 }

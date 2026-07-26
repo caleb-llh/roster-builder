@@ -1,12 +1,11 @@
 import { useState } from 'react'
-import yaml from 'js-yaml'
 import { createRoleColorMap, formatDateRange } from './utils/colorUtils'
 import { calculateRosterStats } from './utils/rosterStats'
 import { validateEventAssignments } from './utils/assignmentValidator'
 import { generateRoster } from './utils/rosterGenerator'
 import { getDerivedState } from './utils/derivedState'
 import { useRosterData } from './hooks/useRosterData'
-import { generateShareableURL } from './utils/urlState'
+import { isMemberUnavailable } from './utils/constraintsUtils'
 import { getActiveConstraints, getActivePreferences, getConstraintDescription, getPreferenceDescription, MEMBER_PREF_FIELDS } from './schema/rosterSchema'
 import { ErrorDisplay } from './components/SharedComponents'
 import MembersView from './components/MembersView'
@@ -25,7 +24,7 @@ function App() {
   const [showDiffModal, setShowDiffModal] = useState(false)
   const [showAlgorithmModal, setShowAlgorithmModal] = useState(false)
   const [generationResult, setGenerationResult] = useState(null)
-  const [showCopiedTooltip, setShowCopiedTooltip] = useState(false)
+  const [swapNotice, setSwapNotice] = useState(null)
 
   // Custom hook for all data management (consolidated state)
   const { 
@@ -169,6 +168,132 @@ function App() {
     }
   }
 
+  // Handle a manual roster slot edit from the Events view.
+  // memberId === null removes the current occupant; otherwise inserts/replaces.
+  const handleEditRosterSlot = (eventDate, roleIndex, memberId) => {
+    const nameOf = (id) => members.find(m => m.id === id)?.name || id || '—'
+    let logEntry = null
+
+    const nextEvents = events.map(event => {
+      if (event.date !== eventDate || !event.roster?.[roleIndex]) return event
+
+      const nextRoster = event.roster.map((slot, idx) => {
+        if (idx !== roleIndex) return slot
+
+        const previous = slot.member_id || null
+        const role = slot.role
+        const where = `${event.date} ${event.name} / ${role}`
+
+        if (!memberId) {
+          logEntry = {
+            level: 'info', category: 'delete', group: 'manual',
+            message: `Removed ${nameOf(previous)} from ${where}`,
+          }
+          const { isGenerated, ...rest } = slot
+          return { ...rest, member_id: null }
+        }
+
+        logEntry = previous
+          ? {
+              level: 'info', category: 'replace', group: 'manual',
+              message: `Replaced ${nameOf(previous)} with ${nameOf(memberId)} on ${where}`,
+            }
+          : {
+              level: 'info', category: 'insert', group: 'manual',
+              message: `Assigned ${nameOf(memberId)} to ${where}`,
+            }
+        return { ...slot, member_id: memberId, isGenerated: false }
+      })
+
+      return { ...event, roster: nextRoster }
+    })
+
+    updateEvents(nextEvents)
+    if (logEntry) logAction(logEntry)
+  }
+
+  // Handle a drag-and-drop swap between two roster slots.
+  // Swaps the two occupants (or moves one into an empty slot) only if both
+  // resulting assignments are valid: role compatibility, date availability,
+  // and no duplicate member within the same event.
+  const handleSwapRosterSlots = (source, target) => {
+    if (
+      source.eventDate === target.eventDate &&
+      source.roleIndex === target.roleIndex
+    ) return
+
+    const memberById = (id) => members.find(m => m.id === id)
+    const nameOf = (id) => memberById(id)?.name || id || '—'
+
+    const eventA = events.find(e => e.date === source.eventDate)
+    const eventB = events.find(e => e.date === target.eventDate)
+    if (!eventA || !eventB) return
+
+    const slotA = eventA.roster?.[source.roleIndex]
+    const slotB = eventB.roster?.[target.roleIndex]
+    if (!slotA || !slotB) return
+
+    const memberA = slotA.member_id || null
+    const memberB = slotB.member_id || null
+    if (!memberA && !memberB) return
+
+    // Can `memberId` occupy the given slot in `event`? Ignores the slot the
+    // member is leaving so a straight swap never fails on itself.
+    const canOccupy = (memberId, event, slot, ignoreRoleIndex) => {
+      if (!memberId) return true // clearing a slot is always valid
+      const member = memberById(memberId)
+      if (!member || member.include === false) return false
+      if (!member.roles?.includes(slot.role)) return false
+      if (isMemberUnavailable(memberId, event.date, memberConstraints)) return false
+      // No duplicate member within the same event.
+      const clash = event.roster.some((r, i) =>
+        i !== ignoreRoleIndex && r.member_id === memberId
+      )
+      return !clash
+    }
+
+    const sameEvent = eventA === eventB
+    // When swapping within one event, both slots share the roster array, so
+    // ignore both indices when checking for duplicates.
+    const aOk = canOccupy(memberA, eventB, slotB, sameEvent ? source.roleIndex : target.roleIndex)
+    const bOk = canOccupy(memberB, eventA, slotA, source.roleIndex)
+
+    if (!aOk || !bOk) {
+      setSwapNotice(
+        `Invalid swap: ${nameOf(memberA)} ↔ ${nameOf(memberB)} would break role, availability, or once-per-event rules.`
+      )
+      setTimeout(() => setSwapNotice(null), 3000)
+      return
+    }
+
+    const nextEvents = events.map(event => {
+      if (event !== eventA && event !== eventB) return event
+      const nextRoster = event.roster.map((slot, idx) => {
+        const isSlotA = event === eventA && idx === source.roleIndex
+        const isSlotB = event === eventB && idx === target.roleIndex
+        if (isSlotA) {
+          if (!memberB) { const { isGenerated, ...rest } = slot; return { ...rest, member_id: null } }
+          return { ...slot, member_id: memberB, isGenerated: false }
+        }
+        if (isSlotB) {
+          if (!memberA) { const { isGenerated, ...rest } = slot; return { ...rest, member_id: null } }
+          return { ...slot, member_id: memberA, isGenerated: false }
+        }
+        return slot
+      })
+      return { ...event, roster: nextRoster }
+    })
+
+    updateEvents(nextEvents)
+    logAction({
+      level: 'info', category: 'swap', group: 'manual',
+      message:
+        memberA && memberB
+          ? `Swapped ${nameOf(memberA)} (${eventA.date}/${slotA.role}) ↔ ${nameOf(memberB)} (${eventB.date}/${slotB.role})`
+          : `Moved ${nameOf(memberA || memberB)} to ${(memberA ? eventB : eventA).date}/${(memberA ? slotB : slotA).role}`,
+    })
+  }
+
   // Handle view diff
   const handleViewDiff = () => {
     if (originalData) {
@@ -176,26 +301,11 @@ function App() {
     }
   }
 
-  // Handle share - copy shareable URL to clipboard
-  const handleShare = async () => {
-    try {
-      const yamlText = yaml.dump(data)
-      const shareableURL = generateShareableURL(yamlText)
-      
-      await navigator.clipboard.writeText(shareableURL)
-      setShowCopiedTooltip(true)
-      setTimeout(() => setShowCopiedTooltip(false), 2000)
-    } catch (err) {
-      console.error('Failed to copy URL:', err)
-      alert('Failed to copy shareable URL')
-    }
-  }
-
   // Handle import new data - consolidates import and clear functionality
   const handleImportNew = () => {
     if (data) {
       // If data exists, confirm before clearing
-      if (confirm('Import new data? This will clear all existing data including localStorage.')) {
+      if (confirm('Import new data? This will clear all existing data.')) {
         clearData()
         setGenerationResult(null)
         setShowImportModal(true)
@@ -278,24 +388,6 @@ function App() {
               )}
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              {/* Share Button */}
-              {data && (
-                <div className="relative">
-                  <button
-                    onClick={handleShare}
-                    className="px-3 sm:px-4 py-2 sm:py-2.5 text-sm font-medium text-gray-700 bg-white/60 backdrop-blur-md border border-gray-300/50 rounded-lg shadow-md hover:bg-gray-50/80 active:bg-gray-100/80 transition-all touch-manipulation min-h-[44px]"
-                    title="Copy shareable URL to clipboard"
-                  >
-                    🔗 <span className="sm:inline">Share</span>
-                  </button>
-                  {showCopiedTooltip && (
-                    <div className="absolute -bottom-8 left-1/2 transform -translate-x-1/2 px-2 py-1 bg-green-600 text-white text-xs rounded shadow-lg whitespace-nowrap">
-                      ✓ Copied to clipboard!
-                    </div>
-                  )}
-                </div>
-              )}
-              
               {/* Import Button */}
               <button
                 onClick={handleImportNew}
@@ -412,10 +504,18 @@ function App() {
             originalData={originalData}
             hasGenerated={hasGenerated}
             onViewDiff={handleViewDiff}
+            onEditRosterSlot={handleEditRosterSlot}
+            onSwapRosterSlots={handleSwapRosterSlots}
             yamlData={data}
           />
         </div>
       </div>
+      {/* Invalid-swap toast */}
+      {swapNotice && (
+        <div className="fixed bottom-4 left-1/2 z-50 -translate-x-1/2 rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-800 shadow-lg">
+          {swapNotice}
+        </div>
+      )}
       {/* Algorithm Description Modal */}
       {showAlgorithmModal && (
         <AlgorithmDescriptionModal
