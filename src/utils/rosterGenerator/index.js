@@ -1,31 +1,39 @@
 /**
- * Roster Generation Algorithm with Multi-Start Optimization
- * 
- * Generates assignments for unassigned roles using a greedy algorithm with weighted scoring.
- * Uses multi-start optimization to explore different solution paths and select the best result.
- * 
- * Process:
- * 1. Run multiple generations with varied event/member ordering (deterministic)
- * 2. Score each result using weighted quality metrics
- * 3. Select and return the best solution
- * 4. Each generation:
- *    - Initialize tracking of existing assignments
- *    - Process events chronologically
- *    - For each unassigned role:
- *      - Find eligible members (satisfy hard constraints)
- *      - Score eligible members (optimize for preferences)
- *      - Assign best-scored member
- *      - Update tracking
- * 
- * Returns: Best result from all runs with quality metrics
+ * Roster Generation Algorithm
+ *
+ * Generates assignments for unassigned roles in two phases:
+ *
+ * Phase 1 — Greedy construction (initial solution):
+ *   - Initialize tracking of existing assignments
+ *   - Process events chronologically
+ *   - For each unassigned role: find eligible members (hard constraints),
+ *     score them (soft preferences, seeded tie-break), assign the best via the
+ *     reversible move layer
+ *
+ * Phase 2 — Local search (optimization):
+ *   - Hill-climb by applying the best improving move (member↔member swap or
+ *     filling an empty slot) until no improving move exists
+ *
+ * A fixed seed keeps output deterministic. Every meaningful decision is captured
+ * by a verbose ActionLogger and returned as result.log / result.logEntries.
+ *
+ * Returns: { events, stats, fairnessMetrics, quality, log, logEntries }
  */
 
 import { AssignmentTracker } from './assignmentTracker'
 import { EligibilityChecker } from './eligibilityChecker'
-import { ScoringEngine } from './scoringEngine'
+import { ScoringEngine, SCORING_WEIGHTS } from './scoringEngine'
+import { RosterState } from './rosterState'
+import { optimizeRoster } from './localSearch'
+import { createRng } from './rng'
+import { ActionLogger, NULL_LOGGER } from './actionLog'
 
 /**
- * Main entry point with multi-start optimization
+ * Main entry point.
+ *
+ * Single seeded greedy construction (Phase 1) followed by local-search
+ * optimization (Phase 2). The seed keeps output deterministic; local search
+ * does the quality optimization, so no multi-restart loop is needed.
  */
 export function generateRoster(
   events,
@@ -37,68 +45,35 @@ export function generateRoster(
   rosterPeriod,
   options = {}
 ) {
-  const { multiStart = true, runs = 20 } = options
-  
-  if (!multiStart || runs <= 1) {
-    // Single run mode
-    return generateRosterSingleRun(
-      events,
-      members,
-      memberConstraints,
-      memberPreferences,
-      rosterConstraints,
-      rosterPreferences,
-      rosterPeriod
-    )
-  }
-  
-  // Multi-start optimization
-  const results = []
-  
-  for (let run = 0; run < runs; run++) {
-    // Vary event and member ordering deterministically
-    const eventOrder = getEventOrderForRun(events, run)
-    const memberOrder = getMemberOrderForRun(members, run)
-    
-    // Generate with these variations
-    const result = generateRosterSingleRun(
-      eventOrder,
-      memberOrder,
-      memberConstraints,
-      memberPreferences,
-      rosterConstraints,
-      rosterPreferences,
-      rosterPeriod
-    )
-    
-    // Restore chronological event order
-    result.events.sort((a, b) => new Date(a.date) - new Date(b.date))
-    
-    // Calculate quality score for comparison
-    const quality = calculateRosterQuality(result, memberPreferences)
-    
-    results.push({
-      ...result,
-      quality,
-      runNumber: run
-    })
-  }
-  
-  // Select best result
-  results.sort((a, b) => b.quality - a.quality)
-  const best = results[0]
-  
-  // Add multi-start metadata
-  best.stats.multiStartInfo = {
-    totalRuns: runs,
-    bestRun: best.runNumber,
-    qualityRange: {
-      best: results[0].quality.toFixed(2),
-      worst: results[results.length - 1].quality.toFixed(2)
-    }
-  }
-  
-  return best
+  const { logging = true } = options
+  const logger = new ActionLogger(logging)
+
+  logger.info('Roster generation started', {
+    events: events.length,
+    members: members.filter(m => m.include !== false).length,
+  })
+
+  const result = generateRosterSingleRun(
+    events,
+    members,
+    memberConstraints,
+    memberPreferences,
+    rosterConstraints,
+    rosterPreferences,
+    rosterPeriod,
+    { logger }
+  )
+
+  // Restore chronological event order
+  result.events.sort((a, b) => new Date(a.date) - new Date(b.date))
+
+  const quality = calculateRosterQuality(result, memberPreferences)
+  logger.success(`Generation complete (quality ${quality.toFixed(2)})`)
+
+  result.quality = quality
+  result.log = logger.toLines()
+  result.logEntries = logger.entries
+  return result
 }
 
 /**
@@ -111,8 +86,12 @@ function generateRosterSingleRun(
   memberPreferences,
   rosterConstraints,
   rosterPreferences,
-  rosterPeriod
+  rosterPeriod,
+  options = {}
 ) {
+  const { seed = 1, localSearch = true, logger = NULL_LOGGER } = options
+  const rng = createRng(seed)
+
   // Initialize components
   const tracker = new AssignmentTracker(members, events, rosterPeriod)
   const eligibilityChecker = new EligibilityChecker(members, memberConstraints, rosterConstraints, tracker)
@@ -121,12 +100,17 @@ function generateRosterSingleRun(
   // Calculate member availability (count how many events each member is available for)
   const memberAvailability = calculateMemberAvailability(members, memberConstraints, events)
   scoringEngine.setMemberAvailability(memberAvailability)
+  logger.debug('Member availability (events available for)', memberAvailability)
   
   // Clone events to avoid mutating original
   const newEvents = JSON.parse(JSON.stringify(events))
   
   // Sort events chronologically
   const sortedEvents = newEvents.sort((a, b) => new Date(a.date) - new Date(b.date))
+  
+  // Reversible state layer: all assignments go through applyMove so the tracker
+  // and events stay in lock-step (and so the same primitives power local search).
+  const state = new RosterState(sortedEvents, tracker)
   
   // Statistics tracking
   const stats = {
@@ -136,20 +120,22 @@ function generateRosterSingleRun(
     unassignableRoles: []
   }
   
-  // Process each event
-  sortedEvents.forEach(event => {
+  // --- Phase 1: greedy construction (initial solution) ---
+  logger.debug('Phase 1: greedy construction')
+  sortedEvents.forEach((event, eventIndex) => {
     if (!event.roster) return
     
     // Get current roster (what's already assigned in this event)
     const currentRoster = event.roster.filter(r => r.member_id)
     
     // Process each role in the event
-    event.roster.forEach(roleAssignment => {
+    event.roster.forEach((roleAssignment, roleIndex) => {
       stats.totalRoles++
       
       // Skip if already assigned
       if (roleAssignment.member_id) {
         stats.assignedRoles++
+        logger.debug(`${event.date} ${event.name} / ${roleAssignment.role}: pre-assigned`, { member: roleAssignment.member_id })
         return
       }
       
@@ -166,25 +152,54 @@ function generateRosterSingleRun(
           role: role,
           reason: 'No eligible members available'
         })
+        logger.warn(`${event.date} ${event.name} / ${role}: no eligible members`)
         return
       }
       
-      // Score and rank eligible members
-      const rankedMembers = scoringEngine.scoreAndRankMembers(eligibleMembers, role, event)
+      // Score and rank eligible members (seeded shuffle breaks ties randomly
+      // but reproducibly, giving each restart a different initial solution).
+      const rankedMembers = scoringEngine.scoreAndRankMembers(rng.shuffle(eligibleMembers), role, event)
       
-      // Assign the best-scored member
+      // Assign the best-scored member via the reversible move layer
       const bestMember = rankedMembers[0]
-      roleAssignment.member_id = bestMember.memberId
-      roleAssignment.isGenerated = true // Mark as generated
-      
-      // Update tracking
-      tracker.recordAssignment(bestMember.memberId, event.date, event.day_of_week, role)
+      state.applyMove({ slot: { eventIndex, roleIndex }, memberId: bestMember.memberId })
       currentRoster.push(roleAssignment)
+      
+      logger.debug(
+        `${event.date} ${event.name} / ${role}: assign ${bestMember.memberId}`,
+        {
+          score: Number(bestMember.totalScore.toFixed(1)),
+          eligible: eligibleMembers.length,
+          runnerUp: rankedMembers[1]
+            ? { member: rankedMembers[1].memberId, score: Number(rankedMembers[1].totalScore.toFixed(1)) }
+            : null,
+        }
+      )
       
       stats.assignedRoles++
       stats.generatedAssignments++
     })
   })
+  logger.info(`Phase 1 done: ${stats.generatedAssignments} assigned, ${stats.unassignableRoles.length} unfilled`)
+  
+  // --- Phase 2: local search (swaps + fill-empty) over reversible moves ---
+  // Hill-climb until no improving move exists (with a safety iteration cap).
+  if (localSearch) {
+    logger.debug('Phase 2: local search')
+    const before = evaluateState(state, memberPreferences)
+    const { iterations } = optimizeRoster(
+      state,
+      eligibilityChecker,
+      (s) => evaluateState(s, memberPreferences),
+      { logger }
+    )
+    const after = evaluateState(state, memberPreferences)
+    recomputeStats(sortedEvents, stats)
+    logger.info(
+      `Phase 2 done: ${iterations} iteration(s), ` +
+      `quality ${before.toFixed(1)} -> ${after.toFixed(1)} (Δ ${(after - before).toFixed(1)})`
+    )
+  }
   
   return {
     events: newEvents,
@@ -198,97 +213,84 @@ function generateRosterSingleRun(
 }
 
 /**
- * Validate and preview roster generation without modifying events
+ * Recompute assignment statistics after local search may have filled or moved
+ * assignments. unassignableRoles keeps only slots that are still empty.
  */
-export function previewRosterGeneration(
-  events,
-  members,
-  memberConstraints,
-  memberPreferences,
-  rosterConstraints,
-  rosterPreferences,
-  rosterPeriod
-) {
-  const result = generateRoster(
-    events,
-    members,
-    memberConstraints,
-    memberPreferences,
-    rosterConstraints,
-    rosterPreferences,
-    rosterPeriod,
-    { multiStart: false } // Single run for preview
-  )
-  
-  return {
-    stats: result.stats,
-    fairnessMetrics: result.fairnessMetrics,
-    canGenerate: result.stats.unassignableRoles.length === 0,
-    warnings: result.stats.unassignableRoles
-  }
-}
-
-/**
- * Deterministically vary event processing order for each run
- * Rotates the starting point through the chronologically sorted events
- */
-function getEventOrderForRun(events, runNumber) {
-  const sorted = [...events].sort((a, b) => new Date(a.date) - new Date(b.date))
-  
-  if (sorted.length === 0) return sorted
-  
-  // Rotate start point: each run starts at a different event position
-  const startIndex = runNumber % sorted.length
-  
-  // Rotate array: [start..end, 0..start-1]
-  return [...sorted.slice(startIndex), ...sorted.slice(0, startIndex)]
-}
-
-/**
- * Deterministically vary member priority for tie-breaking
- */
-function getMemberOrderForRun(members, runNumber) {
-  return members.map((m, i) => ({
-    ...m,
-    _priority: (i + runNumber * 7) % members.length
-  })).sort((a, b) => a._priority - b._priority)
-}
-
-/**
- * Calculate overall roster quality score (higher is better)
- */
-function calculateRosterQuality(result, memberPreferences) {
-  const { fairnessMetrics, stats, events } = result
-  
-  // Count preference violations
-  let dayPrefViolations = 0
-  let rolePrefViolations = 0
-  
+function recomputeStats(events, stats) {
+  let assigned = 0
+  let generated = 0
+  const unassignable = []
   events.forEach(event => {
-    event.roster?.forEach(assignment => {
-      if (assignment.member_id) {
-        const memberPref = memberPreferences?.find(p => p.member_id === assignment.member_id)
-        
-        if (memberPref?.days && !memberPref.days.includes(event.day_of_week)) {
-          dayPrefViolations++
-        }
-        
-        if (memberPref?.roles && !memberPref.roles.includes(assignment.role)) {
-          rolePrefViolations++
-        }
+    event.roster?.forEach(roleAssignment => {
+      if (roleAssignment.member_id) {
+        assigned++
+        if (roleAssignment.isGenerated) generated++
+      } else {
+        unassignable.push({
+          event: event.name,
+          date: event.date,
+          role: roleAssignment.role,
+          reason: 'No eligible members available'
+        })
       }
     })
   })
-  
-  // Weight-based penalty (lower cost = better quality)
-  // Using same weights as scoring engine to penalize violations
-  const cost = 
-    fairnessMetrics.assignmentStdDev * 100 +    // fairness weight
-    fairnessMetrics.spreadStdDev * 50 +          // spread weight
-    dayPrefViolations * 150 +                    // dayPreference weight
-    rolePrefViolations * 120 +                   // rolePreference weight
-    stats.unassignableRoles.length * 1000        // Heavily penalize unassignable roles
-  
+  stats.assignedRoles = assigned
+  stats.generatedAssignments = generated
+  stats.unassignableRoles = unassignable
+}
+
+/**
+ * Calculate overall roster quality score (higher is better).
+ * Wrapper kept for multi-start selection; delegates to evaluateState.
+ */
+function calculateRosterQuality(result, memberPreferences) {
+  return evaluateState(
+    { events: result.events, tracker: { getFairnessScore: () => result.fairnessMetrics.assignmentStdDev, getSpreadScore: () => result.fairnessMetrics.spreadStdDev } },
+    memberPreferences
+  )
+}
+
+/**
+ * Roster quality objective (higher is better), computed directly from a
+ * RosterState-like object ({ events, tracker }). Shared by the multi-start
+ * selection and the local-search loop so both optimize the same objective.
+ */
+function evaluateState(state, memberPreferences) {
+  const { events, tracker } = state
+
+  // Count preference violations and unfilled slots.
+  let dayPrefViolations = 0
+  let rolePrefViolations = 0
+  let emptySlots = 0
+
+  events.forEach(event => {
+    event.roster?.forEach(assignment => {
+      if (!assignment.member_id) {
+        emptySlots++
+        return
+      }
+      const memberPref = memberPreferences?.find(p => p.member_id === assignment.member_id)
+
+      if (memberPref?.days && !memberPref.days.includes(event.day_of_week)) {
+        dayPrefViolations++
+      }
+      if (memberPref?.roles && !memberPref.roles.includes(assignment.role)) {
+        rolePrefViolations++
+      }
+    })
+  })
+
+  // Weight-based penalty (lower cost = better quality). Reuses the shared
+  // SCORING_WEIGHTS so quality selection stays aligned with the per-candidate
+  // scoring engine.
+  const cost =
+    tracker.getFairnessScore() * SCORING_WEIGHTS.fairness +
+    tracker.getSpreadScore() * SCORING_WEIGHTS.spread +
+    dayPrefViolations * SCORING_WEIGHTS.dayPreference +
+    rolePrefViolations * SCORING_WEIGHTS.rolePreference +
+    emptySlots * 1000        // Heavily penalize unfilled roles
+
   // Return negative cost (so higher = better)
   return -cost
 }

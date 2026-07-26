@@ -6,8 +6,6 @@ import { getWeekKey } from '../constraintChecking'
 
 export class AssignmentTracker {
   constructor(members, events, rosterPeriod) {
-    this.members = members
-    this.events = events
     this.rosterPeriod = rosterPeriod
     
     // Track assignments per member
@@ -54,11 +52,38 @@ export class AssignmentTracker {
     tracker.byMonth[monthKey] = (tracker.byMonth[monthKey] || 0) + 1
     tracker.byWeek[weekKey] = (tracker.byWeek[weekKey] || 0) + 1
     tracker.byDay[dayOfWeek] = (tracker.byDay[dayOfWeek] || 0) + 1
-    tracker.dates.push(date)
+    // Keep dates sorted so getLastAssignmentDate is correct regardless of
+    // insertion order (required for reversible moves during local search).
+    insertSorted(tracker.dates, date)
     
     // Track role assignments
     if (role && this.memberRoleAssignments[memberId]) {
       this.memberRoleAssignments[memberId][role] = (this.memberRoleAssignments[memberId][role] || 0) + 1
+    }
+  }
+  
+  /**
+   * Exact inverse of recordAssignment. Used to revert a move during local
+   * search. Safe to call only for an assignment that was previously recorded.
+   */
+  removeAssignment(memberId, date, dayOfWeek, role = null) {
+    const tracker = this.memberAssignments[memberId]
+    if (!tracker) return
+    
+    const eventDate = new Date(date)
+    const monthKey = `${eventDate.getFullYear()}-${String(eventDate.getMonth() + 1).padStart(2, '0')}`
+    const weekKey = getWeekKey(eventDate)
+    
+    tracker.total = Math.max(0, tracker.total - 1)
+    decrement(tracker.byMonth, monthKey)
+    decrement(tracker.byWeek, weekKey)
+    decrement(tracker.byDay, dayOfWeek)
+    
+    const dateIndex = tracker.dates.indexOf(date)
+    if (dateIndex !== -1) tracker.dates.splice(dateIndex, 1)
+    
+    if (role && this.memberRoleAssignments[memberId]) {
+      decrement(this.memberRoleAssignments[memberId], role)
     }
   }
   
@@ -77,18 +102,10 @@ export class AssignmentTracker {
     return this.memberAssignments[memberId]?.byWeek[weekKey] || 0
   }
   
-  getDayAssignmentCount(memberId, dayOfWeek) {
-    return this.memberAssignments[memberId]?.byDay[dayOfWeek] || 0
-  }
-  
   getLastAssignmentDate(memberId) {
     const dates = this.memberAssignments[memberId]?.dates || []
     if (dates.length === 0) return null
     return dates[dates.length - 1]
-  }
-  
-  getAllAssignmentDates(memberId) {
-    return this.memberAssignments[memberId]?.dates || []
   }
   
   getRoleAssignmentCount(memberId, role) {
@@ -129,4 +146,25 @@ export class AssignmentTracker {
     const variance = gaps.reduce((sum, g) => sum + Math.pow(g - mean, 2), 0) / gaps.length
     return Math.sqrt(variance) // Lower is better (more even spread)
   }
+}
+
+// Insert a date string into an ascending-sorted array, keeping it sorted.
+function insertSorted(dates, date) {
+  const t = new Date(date).getTime()
+  let lo = 0
+  let hi = dates.length
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1
+    if (new Date(dates[mid]).getTime() <= t) lo = mid + 1
+    else hi = mid
+  }
+  dates.splice(lo, 0, date)
+}
+
+// Decrement a counter in a map, deleting the key when it reaches zero so the
+// map returns to the exact shape it had before the corresponding increment.
+function decrement(map, key) {
+  if (!(key in map)) return
+  map[key] -= 1
+  if (map[key] <= 0) delete map[key]
 }

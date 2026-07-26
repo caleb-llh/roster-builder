@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { generateRoster, previewRosterGeneration } from './index'
+import { generateRoster } from './index'
 import { CONSTRAINT_KEYS, PREFERENCE_KEYS } from '../../schema/rosterSchema'
 
 describe('Roster Generator', () => {
@@ -63,8 +63,7 @@ describe('Roster Generator', () => {
         [],
         rosterConstraints,
         rosterPreferences,
-        rosterPeriod,
-        { multiStart: false } // Single run for basic test
+        rosterPeriod
       )
 
       expect(result.events[0].roster[0].member_id).toBeTruthy()
@@ -84,8 +83,7 @@ describe('Roster Generator', () => {
         [],
         rosterConstraints,
         rosterPreferences,
-        rosterPeriod,
-        { multiStart: false }
+        rosterPeriod
       )
 
       expect(result.events[0].roster[0].member_id).toBe('alice')
@@ -270,12 +268,12 @@ describe('Roster Generator', () => {
   })
 
   describe('Preview Mode', () => {
-    it('should provide preview without modifying events', () => {
+    it('should not modify the input events', () => {
       const members = createTestMembers()
       const events = createTestEvents()
       const originalEvents = JSON.parse(JSON.stringify(events))
       
-      const preview = previewRosterGeneration(
+      generateRoster(
         events,
         members,
         [],
@@ -285,9 +283,6 @@ describe('Roster Generator', () => {
         rosterPeriod
       )
 
-      expect(preview).toHaveProperty('stats')
-      expect(preview).toHaveProperty('fairnessMetrics')
-      expect(preview).toHaveProperty('canGenerate')
       expect(events).toEqual(originalEvents)
     })
 
@@ -295,7 +290,7 @@ describe('Roster Generator', () => {
       const members = createTestMembers()
       const events = createTestEvents()
       
-      const preview = previewRosterGeneration(
+      const result = generateRoster(
         events,
         members,
         [],
@@ -305,8 +300,7 @@ describe('Roster Generator', () => {
         rosterPeriod
       )
 
-      expect(preview.canGenerate).toBe(true)
-      expect(preview.warnings).toHaveLength(0)
+      expect(result.stats.unassignableRoles).toHaveLength(0)
     })
 
     it('should warn about unassignable roles', () => {
@@ -318,7 +312,7 @@ describe('Roster Generator', () => {
         roster: [{ role: 'vm', member_id: null }]
       }]
       
-      const preview = previewRosterGeneration(
+      const result = generateRoster(
         events,
         members,
         [],
@@ -328,8 +322,7 @@ describe('Roster Generator', () => {
         rosterPeriod
       )
 
-      expect(preview.canGenerate).toBe(false)
-      expect(preview.warnings.length).toBeGreaterThan(0)
+      expect(result.stats.unassignableRoles.length).toBeGreaterThan(0)
     })
   })
 
@@ -454,8 +447,7 @@ describe('Roster Generator', () => {
         preferences,
         { ...rosterConstraints, MAX_ASSIGNMENTS_PER_MONTH: 5 },
         rosterPreferences,
-        rosterPeriod,
-        { multiStart: false }
+        rosterPeriod
       )
 
       // Alice has both day (Saturday) and role (support) preferences
@@ -464,8 +456,8 @@ describe('Roster Generator', () => {
     })
   })
 
-  describe('Multi-Start Optimization', () => {
-    it('should run multiple generations and select best', () => {
+  describe('Quality & Determinism', () => {
+    it('should assign roles and report a quality score', () => {
       const members = createTestMembers()
       const events = createTestEvents()
       
@@ -476,14 +468,10 @@ describe('Roster Generator', () => {
         [],
         rosterConstraints,
         rosterPreferences,
-        rosterPeriod,
-        { multiStart: true, runs: 5 }
+        rosterPeriod
       )
 
-      expect(result.stats.multiStartInfo).toBeDefined()
-      expect(result.stats.multiStartInfo.totalRuns).toBe(5)
-      expect(result.stats.multiStartInfo.bestRun).toBeGreaterThanOrEqual(0)
-      expect(result.stats.multiStartInfo.bestRun).toBeLessThan(5)
+      expect(typeof result.quality).toBe('number')
       expect(result.events[0].roster[0].member_id).toBeTruthy()
     })
 
@@ -498,8 +486,7 @@ describe('Roster Generator', () => {
         [],
         rosterConstraints,
         rosterPreferences,
-        rosterPeriod,
-        { multiStart: true, runs: 3 }
+        rosterPeriod
       )
 
       const result2 = generateRoster(
@@ -509,16 +496,15 @@ describe('Roster Generator', () => {
         [],
         rosterConstraints,
         rosterPreferences,
-        rosterPeriod,
-        { multiStart: true, runs: 3 }
+        rosterPeriod
       )
 
       // Same input should produce same output
-      expect(result1.stats.multiStartInfo.bestRun).toBe(result2.stats.multiStartInfo.bestRun)
-      expect(result1.events[0].roster[0].member_id).toBe(result2.events[0].roster[0].member_id)
+      expect(result1.quality).toBe(result2.quality)
+      expect(JSON.stringify(result1.events)).toBe(JSON.stringify(result2.events))
     })
 
-    it('should default to multi-start when no options provided', () => {
+    it('should attach a verbose algorithm log to the result', () => {
       const members = createTestMembers()
       const events = createTestEvents()
       
@@ -530,11 +516,29 @@ describe('Roster Generator', () => {
         rosterConstraints,
         rosterPreferences,
         rosterPeriod
-        // No options = default multiStart: true, runs: 10
       )
 
-      expect(result.stats.multiStartInfo).toBeDefined()
-      expect(result.stats.multiStartInfo.totalRuns).toBe(20)
+      expect(Array.isArray(result.log)).toBe(true)
+      expect(result.log.length).toBeGreaterThan(0)
+      expect(Array.isArray(result.logEntries)).toBe(true)
+    })
+
+    it('should omit the log when logging is disabled', () => {
+      const members = createTestMembers()
+      const events = createTestEvents()
+      
+      const result = generateRoster(
+        events,
+        members,
+        [],
+        [],
+        rosterConstraints,
+        rosterPreferences,
+        rosterPeriod,
+        { logging: false }
+      )
+
+      expect(result.log).toHaveLength(0)
     })
 
     it('should maintain chronological order in final result', () => {
@@ -552,13 +556,69 @@ describe('Roster Generator', () => {
         [],
         rosterConstraints,
         rosterPreferences,
-        rosterPeriod,
-        { multiStart: true, runs: 3 }
+        rosterPeriod
       )
 
       // Events should be returned in chronological order
       expect(new Date(result.events[0].date) <= new Date(result.events[1].date)).toBe(true)
       expect(new Date(result.events[1].date) <= new Date(result.events[2].date)).toBe(true)
+    })
+  })
+
+  describe('Local Search', () => {
+    it('should never violate ONLY_ONCE_PER_WEEK after optimization', () => {
+      const members = createTestMembers()
+      const events = createTestEvents()
+
+      const result = generateRoster(
+        events, members, [], [],
+        rosterConstraints, rosterPreferences, rosterPeriod
+      )
+
+      // Group assignments by ISO week; no member should appear twice in a week.
+      const perWeek = {}
+      result.events.forEach(event => {
+        const d = new Date(event.date)
+        const weekKey = `${d.getFullYear()}-W${Math.floor(d.getTime() / (7 * 864e5))}`
+        perWeek[weekKey] = perWeek[weekKey] || []
+        event.roster.forEach(r => { if (r.member_id) perWeek[weekKey].push(r.member_id) })
+      })
+      Object.values(perWeek).forEach(ids => {
+        expect(new Set(ids).size).toBe(ids.length)
+      })
+    })
+
+    it('should respect member role compatibility after optimization', () => {
+      const members = createTestMembers()
+      const events = createTestEvents()
+      const byId = Object.fromEntries(members.map(m => [m.id, m]))
+
+      const result = generateRoster(
+        events, members, [], [],
+        rosterConstraints, rosterPreferences, rosterPeriod
+      )
+
+      result.events.forEach(event => {
+        event.roster.forEach(r => {
+          if (r.member_id) {
+            expect(byId[r.member_id].roles).toContain(r.role)
+          }
+        })
+      })
+    })
+
+    it('should remain deterministic with local search enabled', () => {
+      const members = createTestMembers()
+      const events = createTestEvents()
+
+      const run = () => generateRoster(
+        events, members, [], [],
+        rosterConstraints, rosterPreferences, rosterPeriod
+      )
+
+      const a = run()
+      const b = run()
+      expect(JSON.stringify(a.events)).toBe(JSON.stringify(b.events))
     })
   })
 })

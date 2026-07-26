@@ -62,14 +62,7 @@ export const isAssignedToEvent = (memberId, eventRoster) => {
  * Count assignments for a member in a specific week
  */
 export const countWeeklyAssignments = (memberId, targetDate, allEvents) => {
-  const targetWeekKey = getWeekKey(targetDate)
-  if (!targetWeekKey) return 0  // Invalid date
-  
-  return allEvents.filter(event => {
-    const eventWeekKey = getWeekKey(event.date)
-    return eventWeekKey && eventWeekKey === targetWeekKey && 
-           event.roster?.some(r => r.member_id === memberId)
-  }).length
+  return getWeekAssignments(memberId, targetDate, allEvents).length
 }
 
 /**

@@ -326,9 +326,9 @@ describe('derivedState', () => {
       
       const state = getDerivedState(data)
       
-      // Color classes should be valid Tailwind format
-      expect(state.roleColorMap.vm).toMatch(/bg-\w+-\d+ text-\w+-\d+/)
-      expect(state.roleColorMap['cam-1']).toMatch(/bg-\w+-\d+ text-\w+-\d+/)
+      // Color classes should be valid Tailwind format (optional opacity suffix)
+      expect(state.roleColorMap.vm).toMatch(/bg-\w+-\d+(\/\d+)? text-\w+-\d+/)
+      expect(state.roleColorMap['cam-1']).toMatch(/bg-\w+-\d+(\/\d+)? text-\w+-\d+/)
     })
   })
 

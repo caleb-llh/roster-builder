@@ -73,26 +73,30 @@ const period = data[YAML_FIELDS.ROSTER_PERIOD]  // Gets data.roster
 
 ### Generation Algorithm
 
-**Greedy algorithm with multi-start optimization**:
+**Greedy construction followed by local search**:
 
-1. **Multi-Start Optimization** (20 runs by default):
-   - Rotates starting point through chronologically sorted events
-   - Each run begins at a different event position
-   - Generate complete roster for each variation
-   - Score each result using weighted quality metrics
-   - Select best solution across all runs
-
-2. **Single Run Process**:
+1. **Phase 1 — Greedy construction** (initial solution):
    - Calculate member availability (prioritize members with fewer available dates)
    - Load existing assignments into `AssignmentTracker`
-   - Process events from the assigned starting point
+   - Process events chronologically
    - For each unassigned role:
      - `EligibilityChecker`: Filter by hard constraints (must pass)
      - `ScoringEngine`: Score by soft preferences (availability, fairness, spread, day prefs)
-     - Assign best-scored member
+     - Assign best-scored member (seeded tie-break) via the reversible move layer
      - Update tracker
 
-**Why Multi-Start?** Greedy algorithms can get trapped in local optima. By trying different starting positions, we explore multiple solution paths and pick the best result. This is deterministic - same input always produces same output.
+2. **Phase 2 — Local search** (optimization):
+   - Hill-climb by applying the best *improving* move (member↔member swap, or
+     filling an empty slot), each validated against hard constraints and applied
+     reversibly, until no improving move exists
+
+**Why local search?** Greedy alone can get trapped in local optima. Local search
+then explores swaps/fills to improve the roster's quality score. A fixed seed
+keeps this deterministic — same input always produces the same output.
+
+**Debugging**: every decision (greedy assignment, eligibility rejection, each
+local-search move) is captured by a verbose logger, surfaced as a discrete
+"Algorithm log" dropdown in the generation result dialog.
 
 **Availability Prioritization**: Members with more unavailable dates are scored higher, ensuring they get assigned to events they can attend before slots fill up.
 

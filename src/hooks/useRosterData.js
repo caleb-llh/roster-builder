@@ -17,6 +17,7 @@ export function useRosterData() {
   const [hasGenerated, setHasGenerated] = useState(false)
   const [history, setHistory] = useState([])
   const [isFromURL, setIsFromURL] = useState(false) // Track if data is from URL
+  const [actionLog, setActionLog] = useState([]) // Generic roster action log
 
   // Auto-save to localStorage only for explicitly imported data (not URL data)
   useEffect(() => {
@@ -26,12 +27,13 @@ export function useRosterData() {
         data,
         originalData,
         hasGenerated,
-        history
+        history,
+        actionLog
       })
     } else if (isFromURL && data) {
       console.log('[Auto-save] Skipping localStorage save (data is from URL)')
     }
-  }, [data, originalData, hasGenerated, history, isFromURL])
+  }, [data, originalData, hasGenerated, history, isFromURL, actionLog])
 
   // Load data on mount
   useEffect(() => {
@@ -115,6 +117,7 @@ export function useRosterData() {
     setError(null)
     setHasGenerated(false)
     setHistory([])
+    setActionLog([])
     
     // Update URL with new data
     updateURLWithYAML(yamlText)
@@ -130,6 +133,7 @@ export function useRosterData() {
     setOriginalData(null)
     setHasGenerated(false)
     setHistory([])
+    setActionLog([])
     setError(null)
     setIsFromURL(false)
   }
@@ -141,6 +145,23 @@ export function useRosterData() {
       events: newEvents
     }))
     setHasGenerated(true)
+  }
+
+  /**
+   * Append entries to the generic roster action log.
+   *
+   * Each entry is a structured record { level, category, group, message, data }
+   * where `category` describes the kind of action ('generation', 'swap',
+   * 'update', 'delete', 'insert', ...). This is the single choke point future
+   * manual edit handlers (swaps/updates/deletes/inserts) should call so their
+   * actions are captured alongside the generation trace.
+   *
+   * Accepts a single entry or an array of entries.
+   */
+  const logAction = (entryOrEntries) => {
+    const additions = Array.isArray(entryOrEntries) ? entryOrEntries : [entryOrEntries]
+    if (additions.length === 0) return
+    setActionLog(prev => [...prev, ...additions])
   }
 
   // Add to history
@@ -171,11 +192,13 @@ export function useRosterData() {
     hasGenerated,
     history,
     canUndo: history.length > 0,
+    actionLog,
     
     // Actions
     importData,
     clearData,
     updateEvents,
+    logAction,
     saveToHistory,
     undoToHistory,
     setError,

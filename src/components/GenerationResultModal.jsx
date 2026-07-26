@@ -50,25 +50,6 @@ export default function GenerationResultModal({ generationResult, members, onClo
               </div>
             </div>
 
-            {/* Multi-Start Info */}
-            {generationResult.stats.multiStartInfo && (
-              <div className="bg-gradient-to-r from-indigo-50 to-purple-50 rounded-lg p-4 border border-indigo-200">
-                <div className="flex items-center gap-2 mb-2">
-                  <span className="text-lg">✨</span>
-                  <h3 className="font-semibold text-indigo-900">Multi-Start Optimization</h3>
-                </div>
-                <div className="text-sm text-gray-700 space-y-1">
-                  <p>
-                    Generated <span className="font-semibold text-indigo-700">{generationResult.stats.multiStartInfo.totalRuns} variations</span> and selected the best quality roster
-                  </p>
-                  <p className="text-xs text-gray-600">
-                    Best solution: Run #{generationResult.stats.multiStartInfo.bestRun + 1} • 
-                    Quality range: {generationResult.stats.multiStartInfo.qualityRange.best} to {generationResult.stats.multiStartInfo.qualityRange.worst}
-                  </p>
-                </div>
-              </div>
-            )}
-
             {/* Quality Metrics */}
             <QualityMetrics 
               generationResult={generationResult}

@@ -4,26 +4,40 @@ Automated roster generation algorithm that fills unassigned roles while maximizi
 
 ## Architecture
 
-The roster generator uses a **modular greedy algorithm** with weighted scoring:
+The roster generator uses **greedy construction followed by local search**, with
+a pluggable weighted-scoring registry and reversible move primitives:
 
 ```
 src/utils/rosterGenerator/
-├── index.js                 # Main algorithm entry point
-├── assignmentTracker.js     # Tracks assignment state
+├── index.js                 # Main entry point (greedy init + local search + multi-start)
+├── assignmentTracker.js     # Tracks assignment state (reversible: record/removeAssignment)
+├── rosterState.js           # Reversible slot/move layer (applyMove/revertMove, applySwap)
 ├── eligibilityChecker.js    # Validates hard constraints
-├── scoringEngine.js         # Scores members on preferences
+├── scorers.js               # Pluggable scorer registry + SCORING_WEIGHTS
+├── scoringEngine.js         # Thin adapter that ranks candidates via scorers.js
+├── localSearch.js           # Hill-climbing optimizer (swaps + fill-empty)
+├── rng.js                   # Seeded PRNG (deterministic randomization)
+├── actionLog.js             # Verbose action logger (result.log / logEntries)
 └── rosterGenerator.test.js  # Comprehensive test suite
 ```
 
 ## Algorithm Flow
 
+A single seeded pass (reproducible / deterministic):
+
 1. **Initialize Tracking** - Load existing assignments into tracker
-2. **Process Chronologically** - Sort events by date
-3. **For Each Unassigned Role**:
-   - Find eligible members (hard constraints)
-   - Score eligible members (soft preferences)
-   - Assign best-scored member
-   - Update tracking state
+2. **Phase 1 — Greedy construction** (initial solution):
+   - Sort events chronologically
+   - For each unassigned role: find eligible members (hard constraints),
+     score them (soft preferences, with a seeded tie-break shuffle), assign the
+     best via the reversible move layer
+3. **Phase 2 — Local search**: hill-climb by applying the single best *improving*
+   move (member↔member swap, or filling an empty slot) until no improving move
+   exists (or a safety iteration cap is hit). Every candidate is validated
+   against hard constraints and applied reversibly.
+
+Every decision is recorded by a verbose logger and returned as
+`result.log` (text lines) and `result.logEntries` (structured) for debugging.
 
 ## Components
 
@@ -34,6 +48,20 @@ Maintains state during generation:
 - Assignment dates for temporal analysis
 - Fairness metrics (standard deviation)
 - Spread metrics (temporal distribution)
+- `recordAssignment` / `removeAssignment` — exact inverses, enabling reversible moves
+
+### RosterState
+Reversible move layer pairing the events (source of truth) with the tracker
+(derived counters), keeping them in lock-step:
+- `applyMove` / `revertMove` — set/clear a slot's occupant; revert restores exactly
+- `applySwap` / `revertSwap` — exchange two slots' occupants
+- `allSlots`, `getOccupant` — enumeration/inspection for the search loop
+
+### localSearch
+Hill-climbing optimizer over `RosterState`. Enumerates candidate swaps and
+fill-empty moves, validates each via the `EligibilityChecker`, and applies the
+best positive-delta move each iteration. Objective supplied by the caller
+(`evaluateState`, which reuses `SCORING_WEIGHTS`). Stops at a local optimum.
 
 ### EligibilityChecker
 Validates hard constraints (must satisfy):
@@ -44,15 +72,21 @@ Validates hard constraints (must satisfy):
 - `MAX_ASSIGNMENTS_PER_MONTH` - Monthly assignment limit
 
 ### ScoringEngine
-Scores based on soft preferences (optimize for):
+Scores based on soft preferences (optimize for). Weights live in a single
+`SCORING_WEIGHTS` constant (defined in `scorers.js`, re-exported from
+`scoringEngine.js`) and are reused by
+the roster-quality evaluation so the two never drift apart:
 
 | Factor | Weight | Description |
 |--------|--------|-------------|
-| **Fairness** | 100 | Prefer members with fewer total assignments |
-| **Spread** | 50 | Prefer longer gaps since last assignment |
-| **Day Preference** | 30 | Match member's preferred days |
-| **Day Balance** | 20 | Balance assignments across different days for member |
-| **Consecutive Weekends** | 40 | Avoid back-to-back weekends |
+| **Fairness** | 300 | Prefer members with fewer total assignments |
+| **Availability** | 300 | Prioritize members with fewer available dates |
+| **Consecutive Weekends** | 200 | Avoid back-to-back weekends |
+| **Day Preference** | 120 | Match member's preferred days |
+| **Role Preference** | 120 | Match member's preferred roles |
+| **Role Diversity** | 60 | Encourage variety of roles per member |
+| **Spread** | 60 | Prefer longer gaps since last assignment |
+| **Day Balance** | 60 | Balance assignments across different days for member |
 
 ## Usage
 
@@ -77,33 +111,22 @@ const result = generateRoster(
 // - fairnessMetrics: Distribution analysis
 ```
 
-### Preview Generation
-
-Preview without modifying data:
-
-```javascript
-import { previewRosterGeneration } from './utils/rosterGenerator'
-
-const preview = previewRosterGeneration(/* same params */)
-
-console.log(preview.stats)
-console.log(preview.canGenerate)
-console.log(preview.warnings)  // Unassignable roles
-```
-
 ## Configuration
 
 ### Scoring Weights
 
-Adjust in `scoringEngine.js`:
+Adjust the exported `SCORING_WEIGHTS` in `scorers.js`:
 
 ```javascript
-this.weights = {
-  fairness: 100,              // Workload balance
-  spread: 50,                 // Temporal distribution
-  dayPreference: 30,          // Member preferences
-  dayBalance: 20,             // Day variety per member
-  consecutiveWeekends: 40     // Weekend spacing
+export const SCORING_WEIGHTS = {
+  fairness: 300,
+  availability: 300,
+  consecutiveWeekends: 200,
+  dayPreference: 120,
+  rolePreference: 120,
+  roleDiversity: 60,
+  spread: 60,
+  dayBalance: 60,
 }
 ```
 
@@ -174,20 +197,25 @@ Tests cover:
 The modular design allows easy extensions:
 
 1. **New Constraints** - Add to `eligibilityChecker.js`
-2. **New Preferences** - Add scoring factor to `scoringEngine.js`
-3. **Advanced Algorithms** - Replace greedy with backtracking/annealing
-4. **Custom Metrics** - Extend `assignmentTracker.js`
+2. **New Preferences** - Append one entry to the `SCORERS` list in `scorers.js`
+   (a `{ key, enabled, score }` descriptor); it is automatically used by both
+   per-candidate scoring and roster-quality evaluation
+3. **New Move Types** - Add to `localSearch.js` using the reversible primitives
+   in `rosterState.js` (e.g. 3-way rotations, chain moves)
+4. **Advanced Search** - Swap hill-climbing for simulated annealing by changing
+   the acceptance rule in `optimizeRoster` (state is already reversible)
+5. **Custom Metrics** - Extend `assignmentTracker.js`
 
 ## Performance
 
-- **Time Complexity**: O(E × R × M) where E=events, R=roles, M=members
+- **Greedy construction**: O(E × R × M) where E=events, R=roles, M=members
+- **Local search**: each iteration scans O(slots²) swap candidates; runs until a
+  local optimum (bounded by `maxIterations`)
 - **Space Complexity**: O(M + E)
-- Typical generation: <100ms for 20 events, 15 members
 
 ## Future Enhancements
 
-- Backtracking for optimal solutions
-- Simulated annealing for complex constraints
+- Simulated annealing / tabu search for escaping local optima
+- User-facing swap suggestions (reuse `RosterState` + `EligibilityChecker`)
 - Multi-objective optimization
-- Machine learning for preference learning
 - Configurable weight tuning UI

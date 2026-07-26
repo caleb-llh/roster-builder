@@ -35,9 +35,11 @@ function App() {
     loading, 
     hasGenerated,
     canUndo,
+    actionLog,
     importData, 
     clearData, 
     updateEvents,
+    logAction,
     saveToHistory,
     undoToHistory,
     setError 
@@ -152,6 +154,7 @@ function App() {
       )
       
       updateEvents(result.events)
+      logAction(result.logEntries)
       setGenerationResult(result)
       setShowGenerationModal(true)
     } catch (err) {
@@ -352,7 +355,7 @@ function App() {
           
           {/* Roster Statistics */}
           <div className="mt-3 sm:mt-4">
-            <RosterStatsPanel stats={rosterStats} generationResult={generationResult} members={members} />
+            <RosterStatsPanel stats={rosterStats} generationResult={generationResult} members={members} actionLog={actionLog} />
           </div>
           
           {/* Shared Search Bar */}

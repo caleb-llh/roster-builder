@@ -1,7 +1,24 @@
 import { useState } from 'react'
 import QualityMetrics from './QualityMetrics'
+import { formatEntry } from '../utils/rosterGenerator/actionLog'
 
-export default function RosterStatsPanel({ stats, generationResult, members }) {
+const CATEGORY_LABEL = {
+  generation: 'gen',
+  swap: 'swap',
+  update: 'update',
+  delete: 'delete',
+  insert: 'insert',
+}
+
+const CATEGORY_STYLE = {
+  generation: 'bg-blue-100 text-blue-700',
+  swap: 'bg-purple-100 text-purple-700',
+  update: 'bg-amber-100 text-amber-700',
+  delete: 'bg-red-100 text-red-700',
+  insert: 'bg-green-100 text-green-700',
+}
+
+export default function RosterStatsPanel({ stats, generationResult, members, actionLog = [] }) {
   const [showDetails, setShowDetails] = useState(false)
 
   if (!stats || stats.totalSlots === 0) {
@@ -114,6 +131,35 @@ export default function RosterStatsPanel({ stats, generationResult, members }) {
             </div>
           )}
         </div>
+      )}
+
+      {/* Generic Log — captures generation and future manual swaps/updates/deletes/inserts */}
+      {actionLog.length > 0 && (
+        <details className="mt-3 rounded-lg border border-gray-200 bg-gray-50">
+          <summary className="cursor-pointer select-none px-3 py-2 text-sm font-medium text-gray-600 hover:text-gray-900">
+            Log <span className="text-gray-400">({actionLog.length} entries)</span>
+          </summary>
+          <div className="border-t border-gray-200 px-3 py-3">
+            <div className="flex justify-end mb-2">
+              <button
+                onClick={() => navigator.clipboard?.writeText(actionLog.map(formatEntry).join('\n'))}
+                className="text-xs font-medium text-gray-500 hover:text-gray-800"
+              >
+                Copy
+              </button>
+            </div>
+            <div className="max-h-72 overflow-auto rounded bg-gray-900 p-3 font-mono text-[11px] leading-relaxed text-gray-100">
+              {actionLog.map((entry, idx) => (
+                <div key={idx} className="flex items-start gap-2 whitespace-pre-wrap break-words">
+                  <span className={`shrink-0 rounded px-1 ${CATEGORY_STYLE[entry.category] || 'bg-gray-200 text-gray-700'}`}>
+                    {CATEGORY_LABEL[entry.category] || entry.category || 'log'}
+                  </span>
+                  <span>{formatEntry(entry)}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </details>
       )}
     </div>
   )
