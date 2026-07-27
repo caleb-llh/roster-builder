@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { getDerivedState } from './derivedState'
 import { CONSTRAINT_KEYS, PREFERENCE_KEYS } from '../schema/rosterSchema'
+import { DEFAULT_ROSTER_CONSTRAINTS, DEFAULT_ROSTER_PREFERENCES } from '../config/rosterDefaults'
 
 describe('derivedState', () => {
   describe('getDerivedState', () => {
@@ -14,8 +15,8 @@ describe('derivedState', () => {
       expect(state.activeMembers).toEqual([])
       expect(state.memberConstraints).toEqual([])
       expect(state.memberPreferences).toEqual([])
-      expect(state.rosterConstraints).toEqual({})
-      expect(state.rosterPreferences).toEqual({})
+      expect(state.rosterConstraints).toEqual(DEFAULT_ROSTER_CONSTRAINTS)
+      expect(state.rosterPreferences).toEqual(DEFAULT_ROSTER_PREFERENCES)
       expect(state.rosterPeriod).toBeNull()
     })
 
@@ -281,8 +282,8 @@ describe('derivedState', () => {
       expect(state.roles).toEqual([])
       expect(state.memberConstraints).toEqual([])
       expect(state.memberPreferences).toEqual([])
-      expect(state.rosterConstraints).toEqual({})
-      expect(state.rosterPreferences).toEqual({})
+      expect(state.rosterConstraints).toEqual(DEFAULT_ROSTER_CONSTRAINTS)
+      expect(state.rosterPreferences).toEqual(DEFAULT_ROSTER_PREFERENCES)
       expect(state.rosterPeriod).toBeNull()
     })
 

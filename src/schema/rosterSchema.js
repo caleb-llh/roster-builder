@@ -3,8 +3,6 @@
  * Single source of truth for all YAML field names, constraints, preferences, and their metadata
  */
 
-import { z } from 'zod'
-
 // ============================================================================
 // YAML Field Paths
 // ============================================================================
@@ -32,13 +30,20 @@ export const CONSTRAINT_KEYS = {
   MAX_ASSIGNMENTS_PER_MONTH: 'MAX_ASSIGNMENTS_PER_MONTH',
 }
 
-// Zod schemas for type coercion only
-const constraintSchemas = {
-  [CONSTRAINT_KEYS.ENFORCE_MEMBER_ROLES]: z.boolean(),
-  [CONSTRAINT_KEYS.ENFORCE_MEMBER_AVAILABILITY]: z.boolean(),
-  [CONSTRAINT_KEYS.ONLY_ONCE_PER_EVENT]: z.boolean(),
-  [CONSTRAINT_KEYS.ONLY_ONCE_PER_WEEK]: z.boolean(),
-  [CONSTRAINT_KEYS.MAX_ASSIGNMENTS_PER_MONTH]: z.coerce.number().int().min(0),
+// Coercion functions per constraint value. Return the coerced value, or null
+// if the value is missing/invalid.
+const coerceBoolean = (value) => (typeof value === 'boolean' ? value : null)
+const coerceNonNegativeInt = (value) => {
+  const n = Number(value)
+  return Number.isInteger(n) && n >= 0 ? n : null
+}
+
+const constraintCoercers = {
+  [CONSTRAINT_KEYS.ENFORCE_MEMBER_ROLES]: coerceBoolean,
+  [CONSTRAINT_KEYS.ENFORCE_MEMBER_AVAILABILITY]: coerceBoolean,
+  [CONSTRAINT_KEYS.ONLY_ONCE_PER_EVENT]: coerceBoolean,
+  [CONSTRAINT_KEYS.ONLY_ONCE_PER_WEEK]: coerceBoolean,
+  [CONSTRAINT_KEYS.MAX_ASSIGNMENTS_PER_MONTH]: coerceNonNegativeInt,
 }
 
 export const CONSTRAINT_METADATA = {
@@ -128,22 +133,18 @@ export const MEMBER_PREF_FIELDS = {
 // ============================================================================
 
 /**
- * Get the constraint value with type coercion using Zod
+ * Get the constraint value with type coercion
  */
 export function getConstraintValue(rosterConstraints, constraintKey) {
   if (!rosterConstraints) return null
-  
-  const schema = constraintSchemas[constraintKey]
-  if (!schema) return null
-  
+
+  const coerce = constraintCoercers[constraintKey]
+  if (!coerce) return null
+
   const value = rosterConstraints[constraintKey]
   if (value == null) return null
-  
-  try {
-    return schema.parse(value)
-  } catch {
-    return null
-  }
+
+  return coerce(value)
 }
 
 /**
@@ -215,25 +216,4 @@ export function isConstraintEnabled(rosterConstraints, constraintKey) {
  */
 export function isPreferenceEnabled(rosterPreferences, preferenceKey) {
   return rosterPreferences && rosterPreferences[preferenceKey] === true
-}
-
-/**
- * Get default roster constraints
- */
-export function getDefaultConstraints() {
-  return {
-    [CONSTRAINT_KEYS.ENFORCE_MEMBER_ROLES]: true,
-    [CONSTRAINT_KEYS.ENFORCE_MEMBER_AVAILABILITY]: true,
-    [CONSTRAINT_KEYS.ONLY_ONCE_PER_EVENT]: true,
-  }
-}
-
-/**
- * Get default roster preferences
- */
-export function getDefaultPreferences() {
-  return {
-    [PREFERENCE_KEYS.SPREAD_ASSIGNMENTS]: true,
-    [PREFERENCE_KEYS.DIVERSIFY_ROLE_ASSIGNMENTS]: true,
-  }
 }

@@ -125,6 +125,20 @@ export function useLocalRosterProvider() {
     canUndo: history.length > 0,
     actionLog,
     permissions: LOCAL_PERMISSIONS,
+    // Admin surface — production only. Local mode has no roles or membership,
+    // so role is null (the admin UI is gated on role === 'owner') and the
+    // actions are inert stubs to keep the contract shape uniform.
+    role: null,
+    rosters: [],
+    activeRosterId: null,
+    selectRoster: () => {},
+    createRoster: async () => ({ ok: false, errors: ['Not available in local mode.'] }),
+    listMembers: async () => ({ ok: true, errors: [], members: [] }),
+    setMemberRole: async () => ({ ok: false, errors: ['Not available in local mode.'] }),
+    removeMember: async () => ({ ok: false, errors: ['Not available in local mode.'] }),
+    inviteMember: async () => ({ ok: false, errors: ['Not available in local mode.'] }),
+    listInvites: async () => ({ ok: true, errors: [], invites: [] }),
+    revokeInvite: async () => ({ ok: false, errors: ['Not available in local mode.'] }),
 
     // Actions
     importData,

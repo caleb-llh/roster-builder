@@ -14,12 +14,14 @@ import RosterStatsPanel from './components/RosterStatsPanel'
 import AlgorithmDescriptionModal from './components/AlgorithmDescriptionModal'
 import GenerationResultModal from './components/GenerationResultModal'
 import YamlDrawer from './components/YamlDrawer'
+import AdminModal from './components/AdminModal'
 
-function App() {
+function App({ auth }) {
   // UI State
   const [searchQuery, setSearchQuery] = useState('')
   const [showGenerationModal, setShowGenerationModal] = useState(false)
   const [showDrawer, setShowDrawer] = useState(false)
+  const [showAdmin, setShowAdmin] = useState(false)
   const [activeTab, setActiveTab] = useState('members') // mobile-only: 'members' | 'events'
   const [showAlgorithmModal, setShowAlgorithmModal] = useState(false)
   const [generationResult, setGenerationResult] = useState(null)
@@ -27,6 +29,7 @@ function App() {
   const [pendingSwap, setPendingSwap] = useState(null) // { nextEvents, logEntry, message } awaiting confirmation
 
   // Custom hook for all data management (consolidated state)
+  const roster = useRosterData()
   const { 
     data, 
     error, 
@@ -34,6 +37,10 @@ function App() {
     canUndo,
     actionLog,
     permissions,
+    role,
+    rosters,
+    activeRosterId,
+    selectRoster,
     importData, 
     clearData, 
     updateEvents,
@@ -42,7 +49,7 @@ function App() {
     saveToHistory,
     undoToHistory,
     setError 
-  } = useRosterData()
+  } = roster
 
   // Derived state using utility function
   const {
@@ -337,30 +344,48 @@ function App() {
               <h2 className="text-xl sm:text-2xl font-bold text-gray-900 mb-6 text-center">Get Started</h2>
               
               <div className="space-y-4">
-                <button
-                  onClick={() => setShowDrawer(true)}
-                  className="w-full px-6 sm:px-8 py-5 sm:py-6 bg-gradient-to-r from-blue-500 to-blue-600 text-white font-bold text-base sm:text-lg rounded-xl shadow-lg hover:shadow-xl hover:from-blue-600 hover:to-blue-700 active:scale-[0.98] transition-all flex items-center justify-center gap-3 touch-manipulation"
-                >
-                  <span className="text-2xl">📥</span>
-                  <span>Import Roster Data</span>
-                </button>
-                
-                <div className="text-center text-sm text-gray-500">
-                  Paste YAML or upload a file to begin
-                </div>
+                {permissions.canImport && (
+                  <>
+                    <button
+                      onClick={() => setShowDrawer(true)}
+                      className="w-full px-6 sm:px-8 py-5 sm:py-6 bg-gradient-to-r from-blue-500 to-blue-600 text-white font-bold text-base sm:text-lg rounded-xl shadow-lg hover:shadow-xl hover:from-blue-600 hover:to-blue-700 active:scale-[0.98] transition-all flex items-center justify-center gap-3 touch-manipulation"
+                    >
+                      <span className="text-2xl">📥</span>
+                      <span>Import Roster Data</span>
+                    </button>
+
+                    <div className="text-center text-sm text-gray-500">
+                      Paste YAML or upload a file to begin
+                    </div>
+                  </>
+                )}
+
+                {auth?.mode === 'production' && auth.user && (
+                  <button
+                    onClick={() => setShowAdmin(true)}
+                    className="w-full rounded-xl border border-gray-300 px-6 py-3 text-sm font-medium text-gray-700 hover:bg-gray-50 touch-manipulation"
+                  >
+                    ⚙ Create or manage a roster
+                  </button>
+                )}
               </div>
             </div>
           </div>
         </div>
 
-        {/* YAML Drawer (import) */}
-        <YamlDrawer
-          open={showDrawer}
-          onClose={() => setShowDrawer(false)}
-          data={null}
-          onReplace={replaceData}
-          onImport={handleImport}
-        />
+        {/* YAML Drawer (import) — owner-only in production */}
+        {permissions.canImport && (
+          <YamlDrawer
+            open={showDrawer}
+            onClose={() => setShowDrawer(false)}
+            data={null}
+            onReplace={replaceData}
+            onImport={handleImport}
+          />
+        )}
+
+        {/* Owner admin panel (production) */}
+        <AdminModal open={showAdmin} onClose={() => setShowAdmin(false)} roster={roster} />
       </>
     )
   }
@@ -379,6 +404,38 @@ function App() {
                 </div>
               )}
             </div>
+            {auth?.mode === 'production' && auth.user && (
+              <div className="flex items-center gap-2 text-xs text-gray-600">
+                {rosters.length > 1 && (
+                  <select
+                    value={activeRosterId || ''}
+                    onChange={(e) => selectRoster(e.target.value)}
+                    className="max-w-[160px] rounded-md border border-gray-300 px-2 py-1 font-medium text-gray-700 touch-manipulation"
+                    title="Switch roster"
+                  >
+                    {rosters.map((r) => (
+                      <option key={r.id} value={r.id}>{r.name}</option>
+                    ))}
+                  </select>
+                )}
+                {role === 'owner' && (
+                  <button
+                    onClick={() => setShowAdmin(true)}
+                    className="rounded-md border border-gray-300 px-2 py-1 font-medium text-gray-600 hover:bg-gray-100 touch-manipulation"
+                    title="Manage roster & members"
+                  >
+                    ⚙ Manage
+                  </button>
+                )}
+                <span className="max-w-[180px] truncate">{auth.user.email}</span>
+                <button
+                  onClick={auth.signOut}
+                  className="rounded-md border border-gray-300 px-2 py-1 font-medium text-gray-600 hover:bg-gray-100 touch-manipulation"
+                >
+                  Sign out
+                </button>
+              </div>
+            )}
           </div>
           <p className="text-xs sm:text-sm text-gray-600">{activeMembers.length} members · {events.length} events</p>
           
@@ -487,24 +544,31 @@ function App() {
               ↶
             </button>
           )}
-          <button
-            onClick={() => setShowDrawer(true)}
-            className="flex h-12 w-12 items-center justify-center rounded-full bg-white/80 backdrop-blur-md border border-gray-300/50 text-lg shadow-lg hover:bg-white active:scale-95 transition-all touch-manipulation"
-            title="View & edit YAML"
-          >
-            📄
-          </button>
+          {permissions.canImport && (
+            <button
+              onClick={() => setShowDrawer(true)}
+              className="flex h-12 w-12 items-center justify-center rounded-full bg-white/80 backdrop-blur-md border border-gray-300/50 text-lg shadow-lg hover:bg-white active:scale-95 transition-all touch-manipulation"
+              title="View & edit YAML"
+            >
+              📄
+            </button>
+          )}
         </div>
       )}
 
-      {/* Two-way YAML editor drawer */}
-      <YamlDrawer
-        open={showDrawer}
-        onClose={() => setShowDrawer(false)}
-        data={data}
-        onReplace={replaceData}
-        onImport={handleImport}
-      />
+      {/* Two-way YAML editor drawer — owner-only in production */}
+      {permissions.canImport && (
+        <YamlDrawer
+          open={showDrawer}
+          onClose={() => setShowDrawer(false)}
+          data={data}
+          onReplace={replaceData}
+          onImport={handleImport}
+        />
+      )}
+
+      {/* Owner admin panel (production) */}
+      <AdminModal open={showAdmin} onClose={() => setShowAdmin(false)} roster={roster} />
 
       {/* Invalid-swap toast */}
       {swapNotice && (

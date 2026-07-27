@@ -136,32 +136,18 @@ events:
       - role: lead
         member_id:
 
-#########################################################
-#### Constraints at the roster level ####
-#########################################################
-
-# HARD constraints that MUST be fulfilled for valid assignments
-# The roster generator will never violate these rules
-
-roster_constraints:
-  ENFORCE_MEMBER_ROLES: true              # Members can only be assigned roles they can perform
-  ENFORCE_MEMBER_AVAILABILITY: true       # Members won't be assigned when unavailable
-  ONLY_ONCE_PER_EVENT: true               # A member can't be assigned multiple roles in one event
-  ONLY_ONCE_PER_WEEK: true                # A member can't be assigned multiple times in one week (Mon-Sun)
-  MAX_ASSIGNMENTS_PER_MONTH: 2            # Maximum number of assignments per member per month
-
-#########################################################
-#### Preferences at the roster level ####
-#########################################################  
-
-# SOFT preferences - the generator tries to satisfy these but may not always succeed
-# These help create fair and balanced rosters
-
-roster_preferences:
-  AVOID_CONSECUTIVE_WEEKS: true           # Try to avoid assigning members on back-to-back weekends
-  BALANCED_DAY_DISTRIBUTION: true         # Distribute assignments evenly across different days of the week
-  SPREAD_ASSIGNMENTS: true                # Spread assignments evenly across the entire roster period
-  DIVERSIFY_ROLE_ASSIGNMENTS: true        # Maximize variety - rotate different members through each role
+# NOTE: Roster-level constraints (hard rules) and preferences (soft goals) are
+# now built into the app as source-code defaults, so you don't need to declare
+# them here. Sensible defaults are applied automatically.
+#
+# If you want to OVERRIDE a default for this roster, uncomment and set only the
+# keys you want to change, e.g.:
+#
+#   roster_constraints:
+#     MAX_ASSIGNMENTS_PER_MONTH: 3
+#
+#   roster_preferences:
+#     AVOID_CONSECUTIVE_WEEKS: false
 
 #####################################################################
 #### Constraints at the member level (overrides roster level) ####

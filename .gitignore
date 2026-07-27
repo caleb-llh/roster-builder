@@ -24,3 +24,12 @@ dist-ssr
 *.sw?
 
 *requirements.yaml*
+
+# Env
+.env
+.env.*
+!.env.example
+
+# Supabase CLI local artifacts
+supabase/.branches
+supabase/.temp

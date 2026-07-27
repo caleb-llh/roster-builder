@@ -4,6 +4,7 @@
 
 import { YAML_FIELDS } from '../schema/rosterSchema'
 import { createRoleColorMap } from './colorUtils'
+import { DEFAULT_ROSTER_CONSTRAINTS, DEFAULT_ROSTER_PREFERENCES } from '../config/rosterDefaults'
 
 export function getDerivedState(data) {
   if (!data) {
@@ -15,8 +16,8 @@ export function getDerivedState(data) {
       activeMembers: [],
       memberConstraints: [],
       memberPreferences: [],
-      rosterConstraints: {},
-      rosterPreferences: {},
+      rosterConstraints: { ...DEFAULT_ROSTER_CONSTRAINTS },
+      rosterPreferences: { ...DEFAULT_ROSTER_PREFERENCES },
       rosterPeriod: null
     }
   }
@@ -44,9 +45,11 @@ export function getDerivedState(data) {
   // Extract member preferences from member_preferences (top-level array in YAML)
   const memberPreferences = data[YAML_FIELDS.MEMBER_PREFERENCES] || []
 
-  // Extract roster-level constraints and preferences
-  const rosterConstraints = data[YAML_FIELDS.ROSTER_CONSTRAINTS] || {}
-  const rosterPreferences = data[YAML_FIELDS.ROSTER_PREFERENCES] || {}
+  // Extract roster-level constraints and preferences. Source-code defaults are
+  // the base; any keys present in the document override them (so an explicit
+  // `false` or a different MAX_ASSIGNMENTS_PER_MONTH still wins).
+  const rosterConstraints = { ...DEFAULT_ROSTER_CONSTRAINTS, ...(data[YAML_FIELDS.ROSTER_CONSTRAINTS] || {}) }
+  const rosterPreferences = { ...DEFAULT_ROSTER_PREFERENCES, ...(data[YAML_FIELDS.ROSTER_PREFERENCES] || {}) }
   const rosterPeriod = data[YAML_FIELDS.ROSTER_PERIOD] || null
 
   return {

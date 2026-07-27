@@ -15,13 +15,16 @@
 /**
  * Detect the active mode.
  *
- * Production is selected only when a backend URL is configured at build time
- * (VITE_BACKEND_URL). Absent that, we always run the in-memory local playground.
- * This keeps the default GitHub Pages deployment zero-config and login-free.
+ * Production is selected only when Supabase is configured at build time
+ * (VITE_SUPABASE_URL + VITE_SUPABASE_ANON_KEY). Absent those, we always run the
+ * in-memory local playground. This keeps the default GitHub Pages deployment
+ * zero-config and login-free, and lets the same bundle target a local
+ * `supabase start` or a hosted project purely via env vars.
  *
  * @returns {RosterMode}
  */
 export function detectMode() {
-  const backendUrl = import.meta.env?.VITE_BACKEND_URL
-  return backendUrl ? 'production' : 'local'
+  const url = import.meta.env?.VITE_SUPABASE_URL
+  const anonKey = import.meta.env?.VITE_SUPABASE_ANON_KEY
+  return url && anonKey ? 'production' : 'local'
 }

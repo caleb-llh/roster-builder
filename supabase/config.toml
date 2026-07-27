@@ -1,0 +1,36 @@
+# Supabase project config for Roster Builder.
+#
+# `project_id` is a local identifier used by the CLI; it does not need to match
+# the hosted project ref. Run `supabase start` to bring up the local stack, then
+# `supabase db reset` to apply migrations under ./migrations.
+project_id = "roster-builder"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[db]
+port = 54322
+major_version = 15
+
+[studio]
+enabled = true
+port = 54323
+
+[auth]
+enabled = true
+# Set to your deployed GitHub Pages URL in the hosted project's dashboard.
+site_url = "http://localhost:5173"
+additional_redirect_urls = ["http://localhost:5173"]
+jwt_expiry = 3600
+enable_signup = true
+
+[auth.external.google]
+enabled = true
+# Provide these via env when running locally, or set them in the hosted
+# dashboard. Never commit real secrets.
+client_id = "env(SUPABASE_AUTH_GOOGLE_CLIENT_ID)"
+secret = "env(SUPABASE_AUTH_GOOGLE_SECRET)"

@@ -43,6 +43,20 @@
  * @property {any[]} actionLog
  * @property {RosterPermissions} permissions
  *
+ * @property {('owner'|'editor'|'viewer'|null)} role  Caller's role on the active
+ *   roster (production); null in local mode. The admin UI is gated on role === 'owner'.
+ * @property {{id: string, name: string, role: string}[]} rosters  All rosters the
+ *   user belongs to (production); empty in local mode.
+ * @property {(string|null)} activeRosterId  Currently-loaded roster id.
+ * @property {(id: string) => void} selectRoster  Switch the active roster.
+ * @property {(name: string) => Promise<MutationResult>} createRoster
+ * @property {() => Promise<MutationResult & {members: {user_id: string, email: string, role: string}[]}>} listMembers
+ * @property {(email: string, role: string) => Promise<MutationResult>} setMemberRole
+ * @property {(userId: string) => Promise<MutationResult>} removeMember
+ * @property {(email: string, role: string) => Promise<MutationResult>} inviteMember  Whitelist an email before login.
+ * @property {() => Promise<MutationResult & {invites: {email: string, role: string}[]}>} listInvites
+ * @property {(email: string) => Promise<MutationResult>} revokeInvite
+ *
  * @property {(yamlText: string) => Promise<MutationResult>} importData
  * @property {() => Promise<void>} clearData
  * @property {(events: any[]) => Promise<MutationResult>} updateEvents
