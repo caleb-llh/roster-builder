@@ -59,13 +59,6 @@ export const isAssignedToEvent = (memberId, eventRoster) => {
 }
 
 /**
- * Count assignments for a member in a specific week
- */
-export const countWeeklyAssignments = (memberId, targetDate, allEvents) => {
-  return getWeekAssignments(memberId, targetDate, allEvents).length
-}
-
-/**
  * Count assignments for a member in a specific month
  */
 export const countMonthlyAssignments = (memberId, targetDate, allEvents) => {

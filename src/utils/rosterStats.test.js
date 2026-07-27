@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { calculateRosterStats, formatRosterStats } from './rosterStats'
+import { calculateRosterStats } from './rosterStats'
 
 describe('rosterStats', () => {
   describe('calculateRosterStats', () => {
@@ -185,36 +185,6 @@ describe('rosterStats', () => {
       const stats = calculateRosterStats(events, members, multiYearPeriod)
       
       expect(stats.monthCount).toBe(15) // Feb 2026 to Apr 2027
-    })
-  })
-
-  describe('formatRosterStats', () => {
-    const stats = {
-      totalSlots: 52,
-      totalEvents: 26,
-      monthCount: 3,
-      avgSlotsPerEvent: 2.0,
-      avgSlotsPerMonth: 17.3,
-      avgSlotsPerMember: 4.3,
-      memberStats: []
-    }
-
-    it('should format summary correctly', () => {
-      const formatted = formatRosterStats(stats)
-      
-      expect(formatted.summary).toBe('52 total slots across 26 events (3 months)')
-    })
-
-    it('should format averages correctly', () => {
-      const formatted = formatRosterStats(stats)
-      
-      expect(formatted.averages).toBe('Avg: 4.3 shifts/person · 17.3 shifts/month')
-    })
-
-    it('should format detail correctly', () => {
-      const formatted = formatRosterStats(stats)
-      
-      expect(formatted.detail).toBe('2 slots per event')
     })
   })
 })

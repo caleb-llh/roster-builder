@@ -125,16 +125,3 @@ export const calculateRosterStats = (events, members, rosterPeriod) => {
     }
   }
 }
-
-/**
- * Format roster stats for display
- * @param {Object} stats - Stats from calculateRosterStats
- * @returns {Object} - Formatted text for display
- */
-export const formatRosterStats = (stats) => {
-  return {
-    summary: `${stats.totalSlots} total slots across ${stats.totalEvents} events (${stats.monthCount} months)`,
-    averages: `Avg: ${stats.avgSlotsPerMember} shifts/person · ${stats.avgSlotsPerMonth} shifts/month`,
-    detail: `${stats.avgSlotsPerEvent} slots per event`
-  }
-}

@@ -5,7 +5,6 @@ import {
   checkMemberAvailability,
   checkMemberRoleCompatibility,
   isAssignedToEvent,
-  countWeeklyAssignments,
   countMonthlyAssignments,
   getWeekAssignments,
   areConsecutiveWeekends,
@@ -90,22 +89,6 @@ describe('constraintChecking', () => {
 
     it('should return false when member is not assigned', () => {
       expect(isAssignedToEvent('charlie', roster)).toBe(false)
-    })
-  })
-
-  describe('countWeeklyAssignments', () => {
-    const events = [
-      { date: '2026-02-02', roster: [{ member_id: 'alice' }] },
-      { date: '2026-02-07', roster: [{ member_id: 'alice' }] },
-      { date: '2026-02-14', roster: [{ member_id: 'alice' }] }
-    ]
-
-    it('should count assignments in the same week', () => {
-      expect(countWeeklyAssignments('alice', '2026-02-02', events)).toBe(2)
-    })
-
-    it('should only count the target week', () => {
-      expect(countWeeklyAssignments('alice', '2026-02-14', events)).toBe(1)
     })
   })
 

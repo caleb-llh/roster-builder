@@ -36,15 +36,3 @@ export function downloadYAML(yamlContent, filename = 'roster-data.yaml') {
   document.body.removeChild(link)
   URL.revokeObjectURL(url)
 }
-
-/**
- * Copy YAML content to clipboard
- */
-export async function copyYAMLToClipboard(yamlContent) {
-  try {
-    await navigator.clipboard.writeText(yamlContent)
-    return true
-  } catch (err) {
-    throw new Error(`Failed to copy to clipboard: ${err.message}`)
-  }
-}
