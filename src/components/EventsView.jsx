@@ -1,13 +1,35 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { getAvailableMembersForEvent } from '../utils/constraintsUtils'
 import { getCardColorForDay, formatDate } from '../utils/colorUtils'
 import { exportToYAML, downloadYAML } from '../utils/dataExport'
-import { YAML_FIELDS } from '../schema/rosterSchema'
 import RosterSlotPill from './RosterSlotPill'
 
-export default function EventsView({ events, members, memberConstraints, roleColorMap, searchQuery, validationResults, roles, originalData, hasGenerated, onViewDiff, onEditRosterSlot, onSwapRosterSlots, yamlData }) {
+export default function EventsView({ events, members, memberConstraints, roleColorMap, searchQuery, validationResults, roles, onEditRosterSlot, onSwapRosterSlots, yamlData }) {
   const [expandedEvent, setExpandedEvent] = useState(null)
   const [viewMode, setViewMode] = useState('cards') // 'cards' or 'table'
+  const [menuOpen, setMenuOpen] = useState(false)
+  const menuRef = useRef(null)
+
+  useEffect(() => {
+    if (!menuOpen) return
+    const onDocClick = (e) => {
+      if (menuRef.current && !menuRef.current.contains(e.target)) setMenuOpen(false)
+    }
+    document.addEventListener('mousedown', onDocClick)
+    return () => document.removeEventListener('mousedown', onDocClick)
+  }, [menuOpen])
+
+  // Floating month selector (cards view): track which month is in view and
+  // auto-scroll the active chip into view within the selector bar.
+  const [activeMonthKey, setActiveMonthKey] = useState(null)
+  const monthRefs = useRef({})   // monthKey -> section element
+  const chipRefs = useRef({})    // monthKey -> chip button element
+  const selectorRef = useRef(null)
+
+  const scrollToMonth = (key) => {
+    setActiveMonthKey(key)
+    monthRefs.current[key]?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
   
   // Helper to get member display name from member_id
   const getMemberDisplay = (memberId) => {
@@ -36,6 +58,7 @@ export default function EventsView({ events, members, memberConstraints, roleCol
   const sortedMonths = Object.entries(eventsByMonth)
     .sort((a, b) => a[0].localeCompare(b[0]))
     .map(([key, data]) => ({
+      key,
       ...data,
       events: data.events.sort((a, b) => new Date(a.date) - new Date(b.date))
     }))
@@ -54,6 +77,65 @@ export default function EventsView({ events, members, memberConstraints, roleCol
       )
     }))
     .filter(month => month.events.length > 0)
+
+  const monthKeysSignature = filteredMonths.map(m => m.key).join(',')
+
+  // Observe month sections to highlight the one currently in view. On each
+  // change we recompute from *all* section positions (not just the entries in
+  // the callback) and pick the section whose top is closest to a line ~15%
+  // down the viewport. This avoids the stale-highlight lag that happened when
+  // relying on which entry happened to fire.
+  useEffect(() => {
+    if (viewMode !== 'cards') return
+    const sections = filteredMonths
+      .map(m => monthRefs.current[m.key])
+      .filter(Boolean)
+    if (sections.length === 0) return
+
+    const pickActive = () => {
+      const line = window.innerHeight * 0.15
+      let best = null
+      let bestDist = Infinity
+      sections.forEach(section => {
+        const top = section.getBoundingClientRect().top
+        // Prefer the last section whose top has passed the line; fall back to
+        // the closest one when none has (e.g. scrolled to the very top).
+        const dist = top <= line ? line - top : (top - line) + 100000
+        if (dist < bestDist) {
+          bestDist = dist
+          best = section
+        }
+      })
+      if (best) setActiveMonthKey(best.dataset.monthKey)
+    }
+
+    const observer = new IntersectionObserver(pickActive, { threshold: [0, 0.25, 0.5, 0.75, 1] })
+    sections.forEach(s => observer.observe(s))
+
+    let ticking = false
+    const onScroll = () => {
+      if (ticking) return
+      ticking = true
+      window.requestAnimationFrame(() => {
+        pickActive()
+        ticking = false
+      })
+    }
+    window.addEventListener('scroll', onScroll, { passive: true })
+    pickActive()
+
+    return () => {
+      observer.disconnect()
+      window.removeEventListener('scroll', onScroll)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [monthKeysSignature, viewMode])
+
+  // Keep the active chip scrolled into view within the selector bar.
+  useEffect(() => {
+    if (!activeMonthKey) return
+    chipRefs.current[activeMonthKey]?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' })
+  }, [activeMonthKey])
 
   // Calculate total validation issues
   const totalErrors = Object.values(validationResults || {}).reduce((sum, v) => sum + v.errors.length, 0)
@@ -149,65 +231,60 @@ export default function EventsView({ events, members, memberConstraints, roleCol
   return (
     <div className="p-4 sm:p-6">
       <div className="mb-4 sm:mb-6">
-        <h2 className="text-xl sm:text-2xl font-bold text-gray-900 mb-3 sm:mb-4">Events</h2>
-        
-        <div className="flex flex-wrap gap-2">
-          <button
-            onClick={() => setViewMode('cards')}
-            className={`px-3 sm:px-4 py-2 rounded-lg font-medium text-xs sm:text-sm transition-all touch-manipulation min-h-[44px] ${
-              viewMode === 'cards'
-                ? 'bg-blue-500 text-white shadow-lg'
-                : 'bg-white/60 text-gray-700 hover:bg-white/80 active:bg-white border border-gray-200'
-            }`}
-          >
-            📇 Cards
-          </button>
+        <div className="flex items-center justify-between gap-2">
+          <h2 className="text-xl sm:text-2xl font-bold text-gray-900">Events</h2>
 
-          <button
-            onClick={() => setViewMode('table')}
-            className={`px-3 sm:px-4 py-2 rounded-lg font-medium text-xs sm:text-sm transition-all touch-manipulation min-h-[44px] ${
-              viewMode === 'table'
-                ? 'bg-blue-500 text-white shadow-lg'
-                : 'bg-white/60 text-gray-700 hover:bg-white/80 active:bg-white border border-gray-200'
-            }`}
-          >
-            📊 Table
-          </button>
-
-          {originalData && hasGenerated && (
+          {/* Actions menu */}
+          <div className="relative" ref={menuRef}>
             <button
-              onClick={onViewDiff}
-              className="px-3 sm:px-4 py-2 rounded-lg font-medium text-xs sm:text-sm bg-white/60 text-gray-700 hover:bg-white/80 active:bg-white border border-gray-200 shadow-md transition-all touch-manipulation min-h-[44px]"
-              title="View changes between original and generated"
+              onClick={() => setMenuOpen(o => !o)}
+              className="flex items-center justify-center rounded-lg px-2 py-2 text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-800 active:bg-gray-200 touch-manipulation min-h-[44px] min-w-[44px]"
+              title="View & export options"
+              aria-haspopup="true"
+              aria-expanded={menuOpen}
             >
-              🔍 <span className="xs:inline">Diff</span>
+              <span className="text-xl leading-none">⋮</span>
             </button>
-          )}
-          
-          <button
-            onClick={copyToClipboard}
-            className="px-3 sm:px-4 py-2 rounded-lg font-medium text-xs sm:text-sm bg-white/60 text-gray-700 hover:bg-white/80 active:bg-white border border-gray-200 shadow-md transition-all touch-manipulation min-h-[44px]"
-            title="Copy to clipboard for pasting into Excel/Sheets"
-          >
-            📋 <span className="hidden xs:inline">Copy to </span>Excel
-          </button>
 
-          <button
-            onClick={exportToCSV}
-            className="px-3 sm:px-4 py-2 rounded-lg font-medium text-xs sm:text-sm bg-white/60 text-gray-700 hover:bg-white/80 active:bg-white border border-gray-200 shadow-md transition-all touch-manipulation min-h-[44px]"
-            title="Download as CSV file"
-          >
-            💾 <span className="hidden xs:inline">Export </span>CSV
-          </button>
+            {menuOpen && (
+              <div className="absolute right-0 top-full z-30 mt-1 w-52 overflow-hidden rounded-lg border border-gray-200 bg-white py-1 shadow-lg">
+                <div className="px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-gray-400">View</div>
+                <button
+                  onClick={() => { setViewMode('cards'); setMenuOpen(false) }}
+                  className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-blue-50 ${viewMode === 'cards' ? 'font-semibold text-blue-600' : 'text-gray-700'}`}
+                >
+                  📇 Cards {viewMode === 'cards' && <span className="ml-auto">✓</span>}
+                </button>
+                <button
+                  onClick={() => { setViewMode('table'); setMenuOpen(false) }}
+                  className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-blue-50 ${viewMode === 'table' ? 'font-semibold text-blue-600' : 'text-gray-700'}`}
+                >
+                  📊 Table {viewMode === 'table' && <span className="ml-auto">✓</span>}
+                </button>
 
-          <button
-            onClick={exportYAML}
-            className="px-3 sm:px-4 py-2 rounded-lg font-medium text-xs sm:text-sm bg-white/60 text-gray-700 hover:bg-white/80 active:bg-white border border-gray-200 shadow-md transition-all touch-manipulation min-h-[44px]"
-            title="Download as YAML file"
-          >
-            📄 <span className="hidden xs:inline">Export </span>YAML
-          </button>
-
+                <div className="my-1 border-t border-gray-100" />
+                <div className="px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-gray-400">Export</div>
+                <button
+                  onClick={() => { copyToClipboard(); setMenuOpen(false) }}
+                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-gray-700 hover:bg-blue-50"
+                >
+                  📋 Copy to Excel
+                </button>
+                <button
+                  onClick={() => { exportToCSV(); setMenuOpen(false) }}
+                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-gray-700 hover:bg-blue-50"
+                >
+                  💾 Export CSV
+                </button>
+                <button
+                  onClick={() => { exportYAML(); setMenuOpen(false) }}
+                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-gray-700 hover:bg-blue-50"
+                >
+                  📄 Export YAML
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
       
@@ -240,7 +317,12 @@ export default function EventsView({ events, members, memberConstraints, roleCol
       {viewMode === 'cards' && (
         <div className="space-y-8">
           {filteredMonths.map((month, monthIdx) => (
-            <div key={monthIdx}>
+            <div
+              key={monthIdx}
+              data-month-key={month.key}
+              ref={el => { monthRefs.current[month.key] = el }}
+              className="scroll-mt-16"
+            >
               <h3 className="text-xl font-bold text-gray-900 mb-4 pb-2 border-b-2 border-gray-400">
                 {month.monthName}
               </h3>
@@ -498,6 +580,30 @@ export default function EventsView({ events, members, memberConstraints, roleCol
       {filteredMonths.length === 0 && (
         <div className="text-center py-12 text-gray-500">
           {searchQuery ? 'No events match your search' : 'No events scheduled'}
+        </div>
+      )}
+
+      {/* Floating month selector (cards view, 2+ months) */}
+      {viewMode === 'cards' && filteredMonths.length > 1 && (
+        <div className="pointer-events-none fixed inset-x-0 z-30 flex justify-center px-4 bottom-safe">
+          <div
+            ref={selectorRef}
+            className="pointer-events-auto flex max-w-[calc(100%-5rem)] gap-1 overflow-x-auto rounded-full border border-gray-200 bg-white/90 p-1 shadow-lg backdrop-blur-md [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          >
+            {filteredMonths.map(month => {
+              const isActive = month.key === activeMonthKey
+              return (
+                <button
+                  key={month.key}
+                  ref={el => { chipRefs.current[month.key] = el }}
+                  onClick={() => scrollToMonth(month.key)}
+                  className={`shrink-0 whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-medium transition-colors touch-manipulation ${isActive ? 'bg-gray-700 text-white' : 'text-gray-600 hover:bg-gray-100'}`}
+                >
+                  {month.monthName}
+                </button>
+              )
+            })}
+          </div>
         </div>
       )}
     </div>

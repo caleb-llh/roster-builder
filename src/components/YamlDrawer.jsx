@@ -26,6 +26,7 @@ export default function YamlDrawer({ open, onClose, data, onReplace, onImport })
   const [errors, setErrors] = useState([])
   const [dirty, setDirty] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [copied, setCopied] = useState(false)
 
   // Normalized form of what we last synced/pushed — used to detect genuine
   // external changes and to avoid echoing our own pushes back into the editor.
@@ -78,6 +79,12 @@ export default function YamlDrawer({ open, onClose, data, onReplace, onImport })
     setDirty(true)
   }
 
+  const handleCopy = () => {
+    navigator.clipboard?.writeText(text)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 1500)
+  }
+
   const handleFileUpload = (e) => {
     const file = e.target.files[0]
     if (!file) return
@@ -118,12 +125,20 @@ export default function YamlDrawer({ open, onClose, data, onReplace, onImport })
         onClick={onClose}
       />
 
-      {/* Drawer */}
+      {/* Drawer: bottom-sheet on mobile, right-side drawer on sm+ */}
       <aside
-        className={`fixed right-0 top-0 z-50 flex h-full w-full max-w-xl transform flex-col bg-white shadow-2xl transition-transform duration-300 ease-out ${open ? 'translate-x-0' : 'translate-x-full'}`}
+        className={`fixed z-50 flex transform flex-col bg-white shadow-2xl transition-transform duration-300 ease-out
+          inset-x-0 bottom-0 h-[85vh] rounded-t-2xl pb-safe sm:pb-0
+          sm:inset-y-0 sm:right-0 sm:left-auto sm:h-full sm:w-full sm:max-w-xl sm:rounded-none
+          ${open ? 'translate-y-0 sm:translate-x-0' : 'translate-y-full sm:translate-x-full sm:translate-y-0'}`}
         role="dialog"
         aria-label="YAML editor"
       >
+        {/* Grab handle (mobile bottom-sheet affordance) */}
+        <div className="flex justify-center pt-2 sm:hidden">
+          <div className="h-1 w-10 rounded-full bg-gray-300" />
+        </div>
+
         {/* Header */}
         <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3">
           <div className="flex items-center gap-2">
@@ -166,7 +181,16 @@ export default function YamlDrawer({ open, onClose, data, onReplace, onImport })
 
         {/* Editor */}
         <div className="min-h-0 flex-1 overflow-hidden p-3">
-          <div className="h-full overflow-hidden rounded border border-gray-300">
+          <div className="relative h-full overflow-hidden rounded border border-gray-300">
+            {text && (
+              <button
+                onClick={handleCopy}
+                className="absolute right-2 top-2 z-10 flex items-center gap-1 rounded-md bg-white/90 px-2 py-1 text-xs font-medium text-gray-600 shadow-sm ring-1 ring-gray-200 backdrop-blur hover:bg-white hover:text-gray-900"
+                title="Copy YAML to clipboard"
+              >
+                {copied ? '✓ Copied' : '⧉ Copy'}
+              </button>
+            )}
             <CodeMirror
               value={text}
               onChange={handleEditorChange}

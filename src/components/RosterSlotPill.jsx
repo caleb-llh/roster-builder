@@ -31,23 +31,49 @@ export default function RosterSlotPill({
 }) {
   const [open, setOpen] = useState(false)
   const [dragOver, setDragOver] = useState(false)
+  // Pending loss-ful action awaiting confirmation:
+  //  { type: 'remove' } or { type: 'replace', id, name }. null when none.
+  const [confirming, setConfirming] = useState(null)
   const ref = useRef(null)
 
   useEffect(() => {
-    if (!open) return
+    if (!open && !confirming) return
     const onDocClick = (e) => {
-      if (ref.current && !ref.current.contains(e.target)) setOpen(false)
+      if (ref.current && !ref.current.contains(e.target)) {
+        setOpen(false)
+        setConfirming(null)
+      }
     }
     document.addEventListener('mousedown', onDocClick)
     return () => document.removeEventListener('mousedown', onDocClick)
-  }, [open])
+  }, [open, confirming])
 
   // Candidates: available and not the current occupant.
   const candidates = availableMembers.filter(m => m.available && m.id !== memberId)
 
+  // Choosing a candidate: replacing an existing occupant is loss-ful, so it
+  // asks for confirmation first; assigning into an empty slot applies directly.
   const handleSelect = (id) => {
-    onSelect(id)
+    if (memberId) {
+      const name = candidates.find(m => m.id === id)?.name || id
+      setOpen(false)
+      setConfirming({ type: 'replace', id, name })
+    } else {
+      onSelect(id)
+      setOpen(false)
+    }
+  }
+
+  // Removing an occupant is loss-ful, so it asks for confirmation first.
+  const handleRemoveClick = () => {
     setOpen(false)
+    setConfirming({ type: 'remove' })
+  }
+
+  const confirmAction = () => {
+    if (confirming?.type === 'remove') onRemove()
+    else if (confirming?.type === 'replace') onSelect(confirming.id)
+    setConfirming(null)
   }
 
   const editable = Boolean(onSelect)
@@ -117,7 +143,7 @@ export default function RosterSlotPill({
           {editable && (
             <button
               type="button"
-              onClick={onRemove}
+              onClick={handleRemoveClick}
               className="ml-0.5 flex h-4 w-4 items-center justify-center rounded-full text-gray-400 hover:bg-red-100 hover:text-red-600"
               title="Remove member"
             >
@@ -137,7 +163,7 @@ export default function RosterSlotPill({
         </button>
       )}
 
-      {open && editable && (
+      {open && editable && !confirming && (
         <div className="absolute left-0 top-full z-20 mt-1 max-h-52 w-52 overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-lg">
           {candidates.length === 0 ? (
             <div className="px-3 py-2 text-xs italic text-gray-400">
@@ -155,6 +181,32 @@ export default function RosterSlotPill({
               </button>
             ))
           )}
+        </div>
+      )}
+
+      {confirming && editable && (
+        <div className="absolute left-0 top-full z-30 mt-1 w-56 rounded-lg border border-gray-200 bg-white p-3 shadow-lg">
+          <p className="text-xs text-gray-700">
+            {confirming.type === 'remove'
+              ? <>Remove <span className="font-semibold">{memberLabel}</span> from this slot?</>
+              : <>Replace <span className="font-semibold">{memberLabel}</span> with <span className="font-semibold">{confirming.name}</span>?</>}
+          </p>
+          <div className="mt-2 flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setConfirming(null)}
+              className="rounded px-2 py-1 text-xs font-medium text-gray-600 hover:bg-gray-100"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={confirmAction}
+              className="rounded bg-red-600 px-2 py-1 text-xs font-medium text-white hover:bg-red-700"
+            >
+              {confirming.type === 'remove' ? 'Remove' : 'Replace'}
+            </button>
+          </div>
         </div>
       )}
     </div>

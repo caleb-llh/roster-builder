@@ -13,7 +13,6 @@ import EventsView from './components/EventsView'
 import RosterStatsPanel from './components/RosterStatsPanel'
 import AlgorithmDescriptionModal from './components/AlgorithmDescriptionModal'
 import GenerationResultModal from './components/GenerationResultModal'
-import YAMLDiffModal from './components/YAMLDiffModal'
 import YamlDrawer from './components/YamlDrawer'
 
 function App() {
@@ -21,18 +20,17 @@ function App() {
   const [searchQuery, setSearchQuery] = useState('')
   const [showGenerationModal, setShowGenerationModal] = useState(false)
   const [showDrawer, setShowDrawer] = useState(false)
-  const [showDiffModal, setShowDiffModal] = useState(false)
+  const [activeTab, setActiveTab] = useState('members') // mobile-only: 'members' | 'events'
   const [showAlgorithmModal, setShowAlgorithmModal] = useState(false)
   const [generationResult, setGenerationResult] = useState(null)
   const [swapNotice, setSwapNotice] = useState(null)
+  const [pendingSwap, setPendingSwap] = useState(null) // { nextEvents, logEntry, message } awaiting confirmation
 
   // Custom hook for all data management (consolidated state)
   const { 
     data, 
-    originalData, 
     error, 
     loading, 
-    hasGenerated,
     canUndo,
     actionLog,
     permissions,
@@ -206,6 +204,8 @@ function App() {
       return { ...event, roster: nextRoster }
     })
 
+    // Record a pre-mutation snapshot so this single action can be undone.
+    if (logEntry) saveToHistory(events)
     updateEvents(nextEvents)
     if (logEntry) logAction(logEntry)
   }
@@ -282,21 +282,29 @@ function App() {
       return { ...event, roster: nextRoster }
     })
 
-    updateEvents(nextEvents)
-    logAction({
-      level: 'info', category: 'swap', group: 'manual',
-      message:
-        memberA && memberB
-          ? `Swapped ${nameOf(memberA)} (${eventA.date}/${slotA.role}) ↔ ${nameOf(memberB)} (${eventB.date}/${slotB.role})`
-          : `Moved ${nameOf(memberA || memberB)} to ${(memberA ? eventB : eventA).date}/${(memberA ? slotB : slotA).role}`,
+    const message =
+      memberA && memberB
+        ? `Swapped ${nameOf(memberA)} (${eventA.date}/${slotA.role}) ↔ ${nameOf(memberB)} (${eventB.date}/${slotB.role})`
+        : `Moved ${nameOf(memberA || memberB)} to ${(memberA ? eventB : eventA).date}/${(memberA ? slotB : slotA).role}`
+
+    // A swap rewrites two occupants at once (loss-ful), so stage it for
+    // confirmation instead of applying immediately.
+    setPendingSwap({
+      nextEvents,
+      message,
+      prompt: memberA && memberB
+        ? `Swap ${nameOf(memberA)} ↔ ${nameOf(memberB)}?`
+        : `Move ${nameOf(memberA || memberB)}?`,
     })
   }
 
-  // Handle view diff
-  const handleViewDiff = () => {
-    if (originalData) {
-      setShowDiffModal(true)
-    }
+  // Apply the staged swap after the user confirms.
+  const confirmSwap = () => {
+    if (!pendingSwap) return
+    saveToHistory(events) // pre-swap snapshot for single-action undo
+    updateEvents(pendingSwap.nextEvents)
+    logAction({ level: 'info', category: 'swap', group: 'manual', message: pendingSwap.message })
+    setPendingSwap(null)
   }
 
   // Check if there are unassigned roles
@@ -316,22 +324,22 @@ function App() {
   if (!data) {
     return (
       <>
-        <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 flex items-center justify-center p-4">
+        <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 flex items-center justify-center p-4 pt-safe pb-safe">
           <div className="max-w-2xl w-full">
             <div className="text-center mb-8">
-              <h1 className="text-5xl font-bold text-gray-900 mb-4">📋 Roster Builder</h1>
-              <p className="text-xl text-gray-600">
+              <h1 className="text-3xl sm:text-5xl font-bold text-gray-900 mb-4">📋 Roster Builder</h1>
+              <p className="text-base sm:text-xl text-gray-600">
                 Intelligent roster generation and management
               </p>
             </div>
             
-            <div className="bg-white/80 backdrop-blur-md rounded-2xl shadow-2xl p-8 border border-white/50">
-              <h2 className="text-2xl font-bold text-gray-900 mb-6 text-center">Get Started</h2>
+            <div className="bg-white/80 backdrop-blur-md rounded-2xl shadow-2xl p-6 sm:p-8 border border-white/50">
+              <h2 className="text-xl sm:text-2xl font-bold text-gray-900 mb-6 text-center">Get Started</h2>
               
               <div className="space-y-4">
                 <button
                   onClick={() => setShowDrawer(true)}
-                  className="w-full px-8 py-6 bg-gradient-to-r from-blue-500 to-blue-600 text-white font-bold text-lg rounded-xl shadow-lg hover:shadow-xl hover:from-blue-600 hover:to-blue-700 transition-all flex items-center justify-center gap-3"
+                  className="w-full px-6 sm:px-8 py-5 sm:py-6 bg-gradient-to-r from-blue-500 to-blue-600 text-white font-bold text-base sm:text-lg rounded-xl shadow-lg hover:shadow-xl hover:from-blue-600 hover:to-blue-700 active:scale-[0.98] transition-all flex items-center justify-center gap-3 touch-manipulation"
                 >
                   <span className="text-2xl">📥</span>
                   <span>Import Roster Data</span>
@@ -360,8 +368,8 @@ function App() {
   return (
     <div className="min-h-screen bg-slate-50">
       {/* Header */}
-      <header className="bg-white/40 backdrop-blur-md shadow-lg border-b border-white/30">
-        <div className="max-w-full px-4 sm:px-6 lg:px-8 py-3 sm:py-4">
+      <header className="bg-white/40 backdrop-blur-md shadow-lg border-b border-white/30 pt-safe">
+        <div className="max-w-full px-3 sm:px-6 lg:px-8 py-3 sm:py-4">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-2">
             <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
               <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Roster Builder</h1>
@@ -370,43 +378,6 @@ function App() {
                   {formatDateRange(rosterPeriod.start_date, rosterPeriod.end_date)}
                 </div>
               )}
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              {/* Generation Buttons */}
-              {hasUnassignedRoles && permissions.canEditRoster && (
-                <button
-                  onClick={handleGenerateRoster}
-                  className="relative px-4 sm:px-6 py-2.5 text-sm font-bold text-white bg-gradient-to-r from-blue-500 via-blue-600 to-blue-500 bg-[length:200%_100%] rounded-lg shadow-lg hover:shadow-xl active:scale-95 transition-all overflow-hidden group touch-manipulation min-h-[44px]"
-                  style={{ 
-                    animation: 'shimmer 3s ease-in-out infinite',
-                    boxShadow: '0 0 0 2px rgba(59, 130, 246, 0.5), 0 0 20px rgba(59, 130, 246, 0.3)'
-                  }}
-                >
-                  <span className="relative z-10 flex items-center">
-                    ✨ Generate Roster
-                    {unassignedRolesCount > 0 && (
-                      <span className="ml-2 px-2 py-0.5 bg-white/30 rounded-full text-xs font-semibold">
-                        {unassignedRolesCount}
-                      </span>
-                    )}
-                  </span>
-                  <div className="absolute inset-0 rounded-lg" style={{ 
-                    animation: 'borderShimmer 3s ease-in-out infinite',
-                    background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent)',
-                    backgroundSize: '200% 100%'
-                  }} />
-                </button>
-              )}
-              <style>{`
-                @keyframes shimmer {
-                  0%, 100% { background-position: 0% 50%; }
-                  50% { background-position: 100% 50%; }
-                }
-                @keyframes borderShimmer {
-                  0%, 100% { background-position: -100% 0; }
-                  50% { background-position: 200% 0; }
-                }
-              `}</style>
             </div>
           </div>
           <p className="text-xs sm:text-sm text-gray-600">{activeMembers.length} members · {events.length} events</p>
@@ -442,10 +413,26 @@ function App() {
         </div>
       </header>
 
+      {/* Mobile tab switcher (hidden on lg where both panels show side-by-side) */}
+      <div className="lg:hidden sticky top-0 z-30 flex bg-white/70 backdrop-blur-md border-b border-gray-200">
+        <button
+          onClick={() => setActiveTab('members')}
+          className={`flex-1 py-3 text-sm font-semibold transition-colors touch-manipulation ${activeTab === 'members' ? 'text-blue-600 border-b-2 border-blue-500' : 'text-gray-500'}`}
+        >
+          Members <span className="text-xs font-normal">({activeMembers.length})</span>
+        </button>
+        <button
+          onClick={() => setActiveTab('events')}
+          className={`flex-1 py-3 text-sm font-semibold transition-colors touch-manipulation ${activeTab === 'events' ? 'text-blue-600 border-b-2 border-blue-500' : 'text-gray-500'}`}
+        >
+          Events <span className="text-xs font-normal">({events.length})</span>
+        </button>
+      </div>
+
       {/* Split View Container */}
-      <div className="flex flex-col lg:flex-row">
+      <div className="flex flex-col lg:flex-row pb-24 lg:pb-safe">
         {/* Members Section */}
-        <div className="w-full lg:w-5/12 lg:border-r border-gray-200 pb-4 lg:pb-0">
+        <div className={`${activeTab === 'members' ? 'block' : 'hidden'} lg:block w-full lg:w-5/12 lg:border-r border-gray-200 pb-4 lg:pb-0`}>
           <MembersView 
             members={members}
             roles={roles}
@@ -458,7 +445,7 @@ function App() {
         </div>
 
         {/* Events Section */}
-        <div className="w-full lg:w-7/12">
+        <div className={`${activeTab === 'events' ? 'block' : 'hidden'} lg:block w-full lg:w-7/12`}>
           <EventsView 
             events={events}
             members={members}
@@ -467,9 +454,6 @@ function App() {
             roles={roles}
             searchQuery={searchQuery}
             validationResults={validationResults}
-            originalData={originalData}
-            hasGenerated={hasGenerated}
-            onViewDiff={handleViewDiff}
             onEditRosterSlot={permissions.canEditRoster ? handleEditRosterSlot : undefined}
             onSwapRosterSlots={permissions.canEditRoster ? handleSwapRosterSlots : undefined}
             yamlData={data}
@@ -479,12 +463,26 @@ function App() {
 
       {/* Floating action buttons */}
       {!showDrawer && (
-        <div className="fixed bottom-4 right-4 z-40 flex flex-col items-end gap-2 sm:bottom-6 sm:right-6">
+        <div className="fixed right-4 z-40 flex flex-col items-end gap-2 bottom-safe sm:right-6">
+          {hasUnassignedRoles && permissions.canEditRoster && (
+            <button
+              onClick={handleGenerateRoster}
+              className="relative flex h-14 w-14 items-center justify-center rounded-full bg-white/80 backdrop-blur-md border border-gray-300/50 text-2xl text-gray-700 shadow-lg hover:bg-white active:scale-95 transition-all touch-manipulation"
+              title="Generate roster"
+            >
+              ✨
+              {unassignedRolesCount > 0 && (
+                <span className="absolute -top-1 -right-1 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-gray-700 px-1 text-xs font-bold text-white shadow">
+                  {unassignedRolesCount}
+                </span>
+              )}
+            </button>
+          )}
           {canUndo && permissions.canUndo && (
             <button
               onClick={handleUndo}
               className="flex h-12 w-12 items-center justify-center rounded-full bg-white/80 backdrop-blur-md border border-gray-300/50 text-lg text-gray-700 shadow-lg hover:bg-white active:scale-95 transition-all touch-manipulation"
-              title="Undo last generation"
+              title="Undo last action"
             >
               ↶
             </button>
@@ -514,6 +512,31 @@ function App() {
           {swapNotice}
         </div>
       )}
+      {/* Swap confirmation (drag-and-drop rewrites two slots — loss-ful) */}
+      {pendingSwap && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" onClick={() => setPendingSwap(null)}>
+          <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-2xl" onClick={e => e.stopPropagation()}>
+            <p className="text-base font-semibold text-gray-900">{pendingSwap.prompt}</p>
+            <p className="mt-1 text-sm text-gray-600">{pendingSwap.message}</p>
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setPendingSwap(null)}
+                className="rounded-lg px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-100 touch-manipulation"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmSwap}
+                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 touch-manipulation"
+              >
+                Confirm
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {/* Algorithm Description Modal */}
       {showAlgorithmModal && (
         <AlgorithmDescriptionModal
@@ -528,15 +551,6 @@ function App() {
           generationResult={generationResult}
           members={members}
           onClose={() => setShowGenerationModal(false)}
-        />
-      )}
-
-      {/* YAML Diff Modal */}
-      {showDiffModal && originalData && (
-        <YAMLDiffModal
-          originalData={originalData}
-          currentData={data}
-          onClose={() => setShowDiffModal(false)}
         />
       )}
     </div>
