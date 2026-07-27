@@ -304,8 +304,8 @@ export default function EventsView({ events, members, memberConstraints, roleCol
                               memberLabel={getMemberDisplay(assignment.member_id)}
                               isGenerated={assignment.isGenerated}
                               availableMembers={roleAvailability}
-                              onSelect={(memberId) => onEditRosterSlot?.(event.date, idx, memberId)}
-                              onRemove={() => onEditRosterSlot?.(event.date, idx, null)}
+                              onSelect={onEditRosterSlot ? (memberId) => onEditRosterSlot(event.date, idx, memberId) : undefined}
+                              onRemove={onEditRosterSlot ? () => onEditRosterSlot(event.date, idx, null) : undefined}
                               onSwap={onSwapRosterSlots}
                             />
                           )

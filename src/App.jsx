@@ -13,14 +13,14 @@ import EventsView from './components/EventsView'
 import RosterStatsPanel from './components/RosterStatsPanel'
 import AlgorithmDescriptionModal from './components/AlgorithmDescriptionModal'
 import GenerationResultModal from './components/GenerationResultModal'
-import YAMLImportModal from './components/YAMLImportModal'
 import YAMLDiffModal from './components/YAMLDiffModal'
+import YamlDrawer from './components/YamlDrawer'
 
 function App() {
   // UI State
   const [searchQuery, setSearchQuery] = useState('')
   const [showGenerationModal, setShowGenerationModal] = useState(false)
-  const [showImportModal, setShowImportModal] = useState(false)
+  const [showDrawer, setShowDrawer] = useState(false)
   const [showDiffModal, setShowDiffModal] = useState(false)
   const [showAlgorithmModal, setShowAlgorithmModal] = useState(false)
   const [generationResult, setGenerationResult] = useState(null)
@@ -35,9 +35,11 @@ function App() {
     hasGenerated,
     canUndo,
     actionLog,
+    permissions,
     importData, 
     clearData, 
     updateEvents,
+    replaceData,
     logAction,
     saveToHistory,
     undoToHistory,
@@ -119,15 +121,11 @@ function App() {
     return 'The system will automatically create assignments based on:\n\n' + sections.join('\n\n')
   }
 
-  // Handle YAML import
+  // Handle YAML import from the drawer (fresh session).
   const handleImport = async (yamlText) => {
-    try {
-      await importData(yamlText)
-      setShowImportModal(false)
-      setGenerationResult(null)
-    } catch (err) {
-      throw new Error(`Failed to parse YAML: ${err.message}`)
-    }
+    const result = await importData(yamlText)
+    if (result.ok) setGenerationResult(null)
+    return result
   }
 
   // Handle roster generation - show description modal first
@@ -162,8 +160,8 @@ function App() {
   }
 
   // Handle undo
-  const handleUndo = () => {
-    if (undoToHistory()) {
+  const handleUndo = async () => {
+    if (await undoToHistory()) {
       setGenerationResult(null)
     }
   }
@@ -301,21 +299,6 @@ function App() {
     }
   }
 
-  // Handle import new data - consolidates import and clear functionality
-  const handleImportNew = () => {
-    if (data) {
-      // If data exists, confirm before clearing
-      if (confirm('Import new data? This will clear all existing data.')) {
-        clearData()
-        setGenerationResult(null)
-        setShowImportModal(true)
-      }
-    } else {
-      // No data exists, just show import modal
-      setShowImportModal(true)
-    }
-  }
-
   // Check if there are unassigned roles
   const hasUnassignedRoles = events.some(event => 
     event.roster && event.roster.some(r => !r.member_id)
@@ -347,7 +330,7 @@ function App() {
               
               <div className="space-y-4">
                 <button
-                  onClick={() => setShowImportModal(true)}
+                  onClick={() => setShowDrawer(true)}
                   className="w-full px-8 py-6 bg-gradient-to-r from-blue-500 to-blue-600 text-white font-bold text-lg rounded-xl shadow-lg hover:shadow-xl hover:from-blue-600 hover:to-blue-700 transition-all flex items-center justify-center gap-3"
                 >
                   <span className="text-2xl">📥</span>
@@ -362,13 +345,14 @@ function App() {
           </div>
         </div>
 
-        {/* Import Modal for Landing Page */}
-        {showImportModal && (
-          <YAMLImportModal
-            onImport={handleImport}
-            onClose={() => setShowImportModal(false)}
-          />
-        )}
+        {/* YAML Drawer (import) */}
+        <YamlDrawer
+          open={showDrawer}
+          onClose={() => setShowDrawer(false)}
+          data={null}
+          onReplace={replaceData}
+          onImport={handleImport}
+        />
       </>
     )
   }
@@ -388,26 +372,8 @@ function App() {
               )}
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              {/* Import Button */}
-              <button
-                onClick={handleImportNew}
-                className="px-3 sm:px-4 py-2 sm:py-2.5 text-sm font-medium text-gray-700 bg-white/60 backdrop-blur-md border border-gray-300/50 rounded-lg shadow-md hover:bg-gray-50/80 active:bg-gray-100/80 transition-all touch-manipulation min-h-[44px]"
-                title="Import new data"
-              >
-                📥 <span className="sm:inline">Import</span>
-              </button>
-              
               {/* Generation Buttons */}
-              {canUndo && (
-                <button
-                  onClick={handleUndo}
-                  className="px-3 sm:px-4 py-2 sm:py-2.5 text-sm font-medium text-gray-700 bg-white/60 backdrop-blur-md border border-gray-300/50 rounded-lg shadow-md hover:bg-gray-50/80 active:bg-gray-100/80 transition-all touch-manipulation min-h-[44px]"
-                  title="Undo last generation"
-                >
-                  ↶ <span className="sm:inline">Undo</span>
-                </button>
-              )}
-              {hasUnassignedRoles && (
+              {hasUnassignedRoles && permissions.canEditRoster && (
                 <button
                   onClick={handleGenerateRoster}
                   className="relative px-4 sm:px-6 py-2.5 text-sm font-bold text-white bg-gradient-to-r from-blue-500 via-blue-600 to-blue-500 bg-[length:200%_100%] rounded-lg shadow-lg hover:shadow-xl active:scale-95 transition-all overflow-hidden group touch-manipulation min-h-[44px]"
@@ -504,12 +470,44 @@ function App() {
             originalData={originalData}
             hasGenerated={hasGenerated}
             onViewDiff={handleViewDiff}
-            onEditRosterSlot={handleEditRosterSlot}
-            onSwapRosterSlots={handleSwapRosterSlots}
+            onEditRosterSlot={permissions.canEditRoster ? handleEditRosterSlot : undefined}
+            onSwapRosterSlots={permissions.canEditRoster ? handleSwapRosterSlots : undefined}
             yamlData={data}
           />
         </div>
       </div>
+
+      {/* Floating action buttons */}
+      {!showDrawer && (
+        <div className="fixed bottom-4 right-4 z-40 flex flex-col items-end gap-2 sm:bottom-6 sm:right-6">
+          {canUndo && permissions.canUndo && (
+            <button
+              onClick={handleUndo}
+              className="flex h-12 w-12 items-center justify-center rounded-full bg-white/80 backdrop-blur-md border border-gray-300/50 text-lg text-gray-700 shadow-lg hover:bg-white active:scale-95 transition-all touch-manipulation"
+              title="Undo last generation"
+            >
+              ↶
+            </button>
+          )}
+          <button
+            onClick={() => setShowDrawer(true)}
+            className="flex h-12 w-12 items-center justify-center rounded-full bg-white/80 backdrop-blur-md border border-gray-300/50 text-lg shadow-lg hover:bg-white active:scale-95 transition-all touch-manipulation"
+            title="View & edit YAML"
+          >
+            📄
+          </button>
+        </div>
+      )}
+
+      {/* Two-way YAML editor drawer */}
+      <YamlDrawer
+        open={showDrawer}
+        onClose={() => setShowDrawer(false)}
+        data={data}
+        onReplace={replaceData}
+        onImport={handleImport}
+      />
+
       {/* Invalid-swap toast */}
       {swapNotice && (
         <div className="fixed bottom-4 left-1/2 z-50 -translate-x-1/2 rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-800 shadow-lg">
@@ -530,14 +528,6 @@ function App() {
           generationResult={generationResult}
           members={members}
           onClose={() => setShowGenerationModal(false)}
-        />
-      )}
-
-      {/* YAML Import Modal */}
-      {showImportModal && (
-        <YAMLImportModal
-          onImport={handleImport}
-          onClose={() => setShowImportModal(false)}
         />
       )}
 

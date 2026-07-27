@@ -50,6 +50,8 @@ export default function RosterSlotPill({
     setOpen(false)
   }
 
+  const editable = Boolean(onSelect)
+
   // --- Drag-and-drop (only when swapping is enabled) ---
   const handleDragStart = (e) => {
     e.dataTransfer.setData(DRAG_MIME, JSON.stringify(slot))
@@ -101,9 +103,9 @@ export default function RosterSlotPill({
         >
           <button
             type="button"
-            onClick={() => setOpen(o => !o)}
+            onClick={() => editable && setOpen(o => !o)}
             className="max-w-[140px] truncate hover:text-blue-700"
-            title="Replace member"
+            title={editable ? 'Replace member' : undefined}
           >
             {memberLabel}
           </button>
@@ -112,27 +114,30 @@ export default function RosterSlotPill({
               gen
             </span>
           )}
-          <button
-            type="button"
-            onClick={onRemove}
-            className="ml-0.5 flex h-4 w-4 items-center justify-center rounded-full text-gray-400 hover:bg-red-100 hover:text-red-600"
-            title="Remove member"
-          >
-            ×
-          </button>
+          {editable && (
+            <button
+              type="button"
+              onClick={onRemove}
+              className="ml-0.5 flex h-4 w-4 items-center justify-center rounded-full text-gray-400 hover:bg-red-100 hover:text-red-600"
+              title="Remove member"
+            >
+              ×
+            </button>
+          )}
         </span>
       ) : (
         <button
           type="button"
-          onClick={() => setOpen(o => !o)}
-          className={`ml-1.5 inline-flex items-center rounded-full border border-dashed px-2 py-0.5 text-xs transition-colors ${dragOver ? 'border-blue-400 bg-blue-50 text-blue-600 ring-1 ring-blue-400' : 'border-gray-400 bg-white/40 text-gray-500 hover:border-blue-400 hover:text-blue-600'}`}
-          title="Assign member"
+          onClick={() => editable && setOpen(o => !o)}
+          disabled={!editable}
+          className={`ml-1.5 inline-flex items-center rounded-full border border-dashed px-2 py-0.5 text-xs transition-colors ${dragOver ? 'border-blue-400 bg-blue-50 text-blue-600 ring-1 ring-blue-400' : 'border-gray-400 bg-white/40 text-gray-500 hover:border-blue-400 hover:text-blue-600'} ${editable ? '' : 'cursor-default opacity-60'}`}
+          title={editable ? 'Assign member' : undefined}
         >
-          + Assign
+          {editable ? '+ Assign' : 'Unassigned'}
         </button>
       )}
 
-      {open && (
+      {open && editable && (
         <div className="absolute left-0 top-full z-20 mt-1 max-h-52 w-52 overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-lg">
           {candidates.length === 0 ? (
             <div className="px-3 py-2 text-xs italic text-gray-400">
