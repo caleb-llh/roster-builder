@@ -3,6 +3,7 @@ import { getAvailableMembersForEvent } from '../utils/constraintsUtils'
 import { getCardColorForDay, formatDate } from '../utils/colorUtils'
 import { exportToYAML, downloadYAML } from '../utils/dataExport'
 import RosterSlotPill from './RosterSlotPill'
+import { understudySlotRole, isUnderstudyRole, baseRoleOf } from '../utils/understudy'
 
 /**
  * Copy text to the clipboard, returning true on success.
@@ -37,11 +38,23 @@ async function copyText(text) {
   }
 }
 
-export default function EventsView({ events, members, memberConstraints, roleColorMap, searchQuery, validationResults, roles, onEditRosterSlot, onSwapRosterSlots, yamlData }) {
+export default function EventsView({ events, members, memberConstraints, roleColorMap, searchQuery, validationResults, roles, onEditRosterSlot, onSwapRosterSlots, onAddRosterSlot, onRemoveRosterSlot, onClearGenerated, yamlData }) {
   const [expandedEvent, setExpandedEvent] = useState(null)
   const [viewMode, setViewMode] = useState('cards') // 'cards' or 'table'
   const [menuOpen, setMenuOpen] = useState(false)
+  const [addRoleFor, setAddRoleFor] = useState(null) // event.date whose add-role picker is open
+  const [overlayEventKey, setOverlayEventKey] = useState(null) // card with an open slot picker/confirm (lifts its z-index)
   const menuRef = useRef(null)
+  const addRoleRef = useRef(null)
+
+  useEffect(() => {
+    if (!addRoleFor) return
+    const onDocClick = (e) => {
+      if (addRoleRef.current && !addRoleRef.current.contains(e.target)) setAddRoleFor(null)
+    }
+    document.addEventListener('mousedown', onDocClick)
+    return () => document.removeEventListener('mousedown', onDocClick)
+  }, [addRoleFor])
 
   useEffect(() => {
     if (!menuOpen) return
@@ -177,6 +190,60 @@ export default function EventsView({ events, members, memberConstraints, roleCol
   // Use roles from builder config (already ordered)
   const allRoles = roles || []
 
+  // Column layout for tabular exports (CSV / clipboard). An event may contain
+  // the same role more than once (e.g. two "roving-cam" slots), so we widen to
+  // the MAX count of each role across all events. Columns are ordered by the
+  // base catalog with each base role's understudy column ("X-understudy")
+  // inserted right after it; duplicate columns get a numbered label
+  // ("roving-cam 2"). Returns { columns: [{role,label}], maxCount: {role:n} }.
+  const exportColumnLayout = (() => {
+    const maxCount = {}
+    ;(events || []).forEach(e => {
+      const perEvent = {}
+      e.roster?.forEach(s => { if (s.role) perEvent[s.role] = (perEvent[s.role] || 0) + 1 })
+      Object.entries(perEvent).forEach(([role, n]) => {
+        if (n > (maxCount[role] || 0)) maxCount[role] = n
+      })
+    })
+
+    const columns = []
+    const pushRole = (role) => {
+      const n = maxCount[role] || 0
+      for (let i = 0; i < n; i++) {
+        columns.push({ role, index: i, label: i === 0 ? role : `${role} ${i + 1}` })
+      }
+    }
+    // All REAL roles first (in catalog order), then all UNDERSTUDY columns
+    // after them, so the sequence is: real roles..., then X-understudy columns.
+    allRoles.forEach(role => pushRole(role))
+    allRoles.forEach(role => pushRole(understudySlotRole(role)))
+    // Roles present in data but not derived from a base catalog role: append
+    // real ones with the real block and understudy ones at the very end.
+    Object.keys(maxCount).forEach(role => {
+      if (columns.some(c => c.role === role)) return
+      if (!isUnderstudyRole(role)) pushRole(role)
+    })
+    Object.keys(maxCount).forEach(role => {
+      if (columns.some(c => c.role === role)) return
+      if (isUnderstudyRole(role)) pushRole(role)
+    })
+    return { columns, maxCount }
+  })()
+  const exportColumns = exportColumnLayout.columns
+
+  // Whether any slot carries the auto-generated tag (enables "Remove generated").
+  const hasGenerated = (events || []).some(e => e.roster?.some(s => s.isGenerated))
+
+  // Roles offered by the "+ Role" picker: every base role plus its understudy
+  // variant (understudy slots follow the "X-understudy" suffix convention and
+  // aren't part of the base catalog).
+  const addableRoleOptions = allRoles.flatMap(role => [role, understudySlotRole(role)])
+
+  // Color class for a role tag; understudy slots reuse their base role's color
+  // since they aren't in the base color map.
+  const roleColor = (role) =>
+    roleColorMap[role] || (isUnderstudyRole(role) ? roleColorMap[baseRoleOf(role)] : undefined) || ''
+
   // Generate export data with roles as columns
   const generateExportData = () => {
     const rows = []
@@ -187,21 +254,26 @@ export default function EventsView({ events, members, memberConstraints, roleCol
         const errorSummary = validation.errors.length > 0 ? validation.errors.join('; ') : ''
         const warningSummary = validation.warnings.length > 0 ? validation.warnings.join('; ') : ''
         
-        // Create roster map for easy lookup
-        const rosterMap = {}
+        // Group this event's assignments by role so duplicate roles (e.g. two
+        // "roving-cam" slots) can be placed into their own columns positionally.
+        const byRole = {}
         if (event.roster) {
           event.roster.forEach(assignment => {
-            rosterMap[assignment.role] = getMemberDisplay(assignment.member_id)
+            ;(byRole[assignment.role] = byRole[assignment.role] || []).push(assignment.member_id)
           })
         }
-        
-        // Build row with each role as a column
+
+        // Build row: metadata (date, day, reporting time, name), then one cell
+        // per export column (real roles first, then understudy columns).
         const row = [
           event.date,
           event.day_of_week,
-          event.name,
           event.reporting_time,
-          ...allRoles.map(role => rosterMap[role] || ''),
+          event.name,
+          ...exportColumns.map(col => {
+            const memberId = byRole[col.role]?.[col.index]
+            return memberId !== undefined && memberId !== null ? getMemberDisplay(memberId) : '-'
+          }),
           errorSummary,
           warningSummary
         ]
@@ -214,7 +286,7 @@ export default function EventsView({ events, members, memberConstraints, roleCol
 
   // Export to CSV
   const exportToCSV = () => {
-    const header = ['Date', 'Day', 'Event Name', 'Reporting Time', ...allRoles, 'Errors', 'Warnings']
+    const header = ['Date', 'Day', 'Reporting Time', 'Event Name', ...exportColumns.map(c => c.label), 'Errors', 'Warnings']
     const data = generateExportData()
     const csvRows = [
       header.join(','),
@@ -235,7 +307,7 @@ export default function EventsView({ events, members, memberConstraints, roleCol
 
   // Copy to clipboard in tab-separated format
   const copyToClipboard = async () => {
-    const header = ['Date', 'Day', 'Event Name', 'Reporting Time', ...allRoles, 'Errors', 'Warnings']
+    const header = ['Date', 'Day', 'Reporting Time', 'Event Name', ...exportColumns.map(c => c.label), 'Errors', 'Warnings']
     const data = generateExportData()
     const tsvContent = [
       header.join('\t'),
@@ -294,6 +366,21 @@ export default function EventsView({ events, members, memberConstraints, roleCol
                 >
                   📊 Table {viewMode === 'table' && <span className="ml-auto">✓</span>}
                 </button>
+
+                {onClearGenerated && (
+                  <>
+                    <div className="my-1 border-t border-gray-100" />
+                    <div className="px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-gray-400">Roster</div>
+                    <button
+                      onClick={() => { onClearGenerated(); setMenuOpen(false) }}
+                      disabled={!hasGenerated}
+                      className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm ${hasGenerated ? 'text-red-700 hover:bg-red-50' : 'cursor-default text-gray-300'}`}
+                      title={hasGenerated ? 'Remove all auto-generated assignments' : 'No generated assignments'}
+                    >
+                      🧹 Remove generated
+                    </button>
+                  </>
+                )}
 
                 <div className="my-1 border-t border-gray-100" />
                 <div className="px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-gray-400">Export</div>
@@ -363,7 +450,7 @@ export default function EventsView({ events, members, memberConstraints, roleCol
               {month.events.map((event, eventIdx) => {
                 const eventKey = `${monthIdx}-${eventIdx}`
                 const isExpanded = expandedEvent === eventKey
-                const availabilityData = getAvailableMembersForEvent(event, members, memberConstraints)
+                const availabilityData = getAvailableMembersForEvent(event, members, memberConstraints, events)
                 
                 // Get validation results for this event
                 const validation = validationResults?.[event.date] || { errors: [], warnings: [] }
@@ -376,7 +463,7 @@ export default function EventsView({ events, members, memberConstraints, roleCol
                 const cardBgClass = getCardColorForDay(dayOfWeek)
                 
                 return (
-                <div key={eventIdx} className={`${cardBgClass} backdrop-blur-md rounded-lg shadow-lg border border-white/30 p-3 transition-all ${hasErrors ? 'ring-2 ring-red-500' : hasWarnings ? 'ring-2 ring-yellow-500' : ''}`}>
+                <div key={eventIdx} className={`relative ${overlayEventKey === eventKey || addRoleFor === event.date ? 'z-40' : ''} ${cardBgClass} backdrop-blur-md rounded-lg shadow-lg border border-white/30 p-3 transition-all ${hasErrors ? 'ring-2 ring-red-500' : hasWarnings ? 'ring-2 ring-yellow-500' : ''}`}>
                   <div className="mb-3">
                     <div className="text-xl font-bold text-gray-900 mb-1 flex items-center gap-2">
                       {formatDate(event.date)}
@@ -394,11 +481,11 @@ export default function EventsView({ events, members, memberConstraints, roleCol
                     </div>
                   </div>
                   
-                  {event.roster && event.roster.length > 0 && (
+                  {(event.roster?.length > 0 || onAddRosterSlot) && (
                     <div className="mb-2">
                       <div className="text-xs font-semibold text-gray-700 mb-1">Roster:</div>
                       <div className="flex flex-col gap-1.5">
-                        {event.roster.map((assignment, idx) => {
+                        {(event.roster || []).map((assignment, idx) => {
                           // Members already assigned in this event (exclude from
                           // candidates so inserts respect one-slot-per-event).
                           const assignedInEvent = new Set(
@@ -414,17 +501,53 @@ export default function EventsView({ events, members, memberConstraints, roleCol
                               key={idx}
                               slot={{ eventDate: event.date, roleIndex: idx }}
                               role={assignment.role}
-                              roleColorClass={roleColorMap[assignment.role]}
+                              roleColorClass={roleColor(assignment.role)}
                               memberId={assignment.member_id}
                               memberLabel={getMemberDisplay(assignment.member_id)}
                               isGenerated={assignment.isGenerated}
                               availableMembers={roleAvailability}
                               onSelect={onEditRosterSlot ? (memberId) => onEditRosterSlot(event.date, idx, memberId) : undefined}
                               onRemove={onEditRosterSlot ? () => onEditRosterSlot(event.date, idx, null) : undefined}
+                              onRemoveSlot={onRemoveRosterSlot ? () => onRemoveRosterSlot(event.date, idx) : undefined}
                               onSwap={onSwapRosterSlots}
+                              onOpenChange={(isOpen) => setOverlayEventKey(prev => isOpen ? eventKey : (prev === eventKey ? null : prev))}
                             />
                           )
                         })}
+
+                        {/* Add-role control */}
+                        {onAddRosterSlot && (() => {
+                          const usedRoles = new Set((event.roster || []).map(r => r.role))
+                          const addableRoles = addableRoleOptions.filter(r => !usedRoles.has(r))
+                          const isOpen = addRoleFor === event.date
+                          return (
+                            <div className="relative inline-flex" ref={isOpen ? addRoleRef : undefined}>
+                              <button
+                                type="button"
+                                onClick={() => setAddRoleFor(isOpen ? null : event.date)}
+                                disabled={addableRoles.length === 0}
+                                className={`inline-flex w-fit items-center rounded-full border border-dashed px-2 py-0.5 text-xs transition-colors touch-manipulation ${addableRoles.length === 0 ? 'cursor-default border-gray-300 text-gray-300' : 'border-gray-400 bg-white/40 text-gray-500 hover:border-blue-400 hover:text-blue-600'}`}
+                                title={addableRoles.length === 0 ? 'All roles already added' : 'Add a role to this event'}
+                              >
+                                + Role
+                              </button>
+                              {isOpen && addableRoles.length > 0 && (
+                                <div className="absolute left-0 top-full z-20 mt-1 max-h-52 w-44 overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-lg">
+                                  {addableRoles.map(role => (
+                                    <button
+                                      key={role}
+                                      type="button"
+                                      onClick={() => { onAddRosterSlot(event.date, role); setAddRoleFor(null) }}
+                                      className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-gray-700 hover:bg-blue-50"
+                                    >
+                                      <span className={`px-1.5 py-0.5 rounded font-medium ${roleColor(role)}`}>{role}</span>
+                                    </button>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          )
+                        })()}
                       </div>
                     </div>
                   )}
@@ -517,9 +640,9 @@ export default function EventsView({ events, members, memberConstraints, roleCol
                         <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Date</th>
                         <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Event</th>
                         <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Time</th>
-                        {allRoles.map(role => (
-                          <th key={role} className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                            {role}
+                        {exportColumns.map(col => (
+                          <th key={col.label} className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                            {col.label}
                           </th>
                         ))}
                         <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Status</th>
@@ -534,13 +657,13 @@ export default function EventsView({ events, members, memberConstraints, roleCol
                         const dayOfWeek = eventDate.getDay()
                         const cardBgClass = getCardColorForDay(dayOfWeek)
                         
-                        // Create roster map for easy lookup
-                        const rosterMap = {}
-                        const rosterGeneratedMap = {}
+                        // Group slots by role (positional) so duplicate roles
+                        // and understudy columns each get their own cell.
+                        const byRole = {}
                         if (event.roster) {
                           event.roster.forEach(assignment => {
-                            rosterMap[assignment.role] = assignment.member_id
-                            rosterGeneratedMap[assignment.role] = assignment.isGenerated
+                            if (!assignment.role) return
+                            ;(byRole[assignment.role] ||= []).push(assignment)
                           })
                         }
                         
@@ -565,22 +688,25 @@ export default function EventsView({ events, members, memberConstraints, roleCol
                             <td className="px-4 py-3">
                               <span className="text-sm text-gray-700">{event.reporting_time}</span>
                             </td>
-                            {allRoles.map(role => (
-                              <td key={role} className="px-4 py-3">
-                                {rosterMap[role] ? (
-                                  <div className="flex items-center gap-1.5">
-                                    <span className="text-sm text-gray-900 font-medium">{getMemberDisplay(rosterMap[role])}</span>
-                                    {rosterGeneratedMap[role] && (
-                                      <span className="px-1.5 py-0.5 text-[10px] font-medium bg-gray-100 text-gray-500 rounded" title="Auto-generated by algorithm">
-                                        generated
-                                      </span>
-                                    )}
-                                  </div>
-                                ) : (
-                                  <span className="text-xs text-gray-400 italic">-</span>
-                                )}
-                              </td>
-                            ))}
+                            {exportColumns.map(col => {
+                              const slot = byRole[col.role]?.[col.index]
+                              return (
+                                <td key={col.label} className="px-4 py-3">
+                                  {slot && slot.member_id ? (
+                                    <div className="flex items-center gap-1.5">
+                                      <span className="text-sm text-gray-900 font-medium">{getMemberDisplay(slot.member_id)}</span>
+                                      {slot.isGenerated && (
+                                        <span className="px-1.5 py-0.5 text-[10px] font-medium bg-gray-100 text-gray-500 rounded" title="Auto-generated by algorithm">
+                                          generated
+                                        </span>
+                                      )}
+                                    </div>
+                                  ) : (
+                                    <span className="text-xs text-gray-400 italic">-</span>
+                                  )}
+                                </td>
+                              )
+                            })}
                             <td className="px-4 py-3">
                               <div className="flex flex-col gap-1">
                                 {hasErrors && (

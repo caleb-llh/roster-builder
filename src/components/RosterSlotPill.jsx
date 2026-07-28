@@ -27,7 +27,9 @@ export default function RosterSlotPill({
   availableMembers = [],
   onSelect,
   onRemove,
+  onRemoveSlot,
   onSwap,
+  onOpenChange,
 }) {
   const [open, setOpen] = useState(false)
   const [dragOver, setDragOver] = useState(false)
@@ -35,6 +37,13 @@ export default function RosterSlotPill({
   //  { type: 'remove' } or { type: 'replace', id, name }. null when none.
   const [confirming, setConfirming] = useState(null)
   const ref = useRef(null)
+
+  // Notify the parent when this pill's overlay (picker or confirm) opens or
+  // closes so the enclosing card can lift its stacking context above siblings.
+  useEffect(() => {
+    onOpenChange?.(open || Boolean(confirming))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, confirming])
 
   useEffect(() => {
     if (!open && !confirming) return
@@ -116,8 +125,18 @@ export default function RosterSlotPill({
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
-      <span className={`px-1.5 py-0.5 text-xs font-medium rounded ${roleColorClass}`}>
+      <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 text-xs font-medium rounded ${roleColorClass}`}>
         {role}
+        {onRemoveSlot && (
+          <button
+            type="button"
+            onClick={onRemoveSlot}
+            className="ml-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full opacity-60 hover:bg-red-500/20 hover:text-red-700 hover:opacity-100"
+            title="Remove this role from the event"
+          >
+            ×
+          </button>
+        )}
       </span>
 
       {memberId ? (
@@ -175,9 +194,14 @@ export default function RosterSlotPill({
                 key={m.id}
                 type="button"
                 onClick={() => handleSelect(m.id)}
-                className="block w-full truncate px-3 py-1.5 text-left text-xs text-gray-700 hover:bg-blue-50"
+                className="flex w-full items-center justify-between gap-2 px-3 py-1.5 text-left text-xs text-gray-700 hover:bg-blue-50"
               >
-                {m.name}
+                <span className="truncate">{m.name}</span>
+                {m.isUnderstudy && (
+                  <span className="shrink-0 rounded bg-amber-100 px-1 text-[10px] font-medium text-amber-700" title="Promoted understudy — trained for this role">
+                    understudy
+                  </span>
+                )}
               </button>
             ))
           )}

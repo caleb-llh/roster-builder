@@ -90,6 +90,33 @@ describe('Roster Generator', () => {
       expect(result.stats.assignedRoles).toBeGreaterThanOrEqual(1)
     })
 
+    it('should never move a pre-assigned member during local-search swaps', () => {
+      // A pre-assigned (manual) slot has no isGenerated flag. Even when a swap
+      // would look attractive to the optimizer, the locked member must stay put.
+      const members = createTestMembers()
+      const events = createTestEvents()
+      // Manually place charlie on cam-1 in both events (would violate spread /
+      // once-per-week balance the optimizer normally tries to fix by swapping).
+      events[0].roster[1].member_id = 'charlie'
+      events[1].roster[1].member_id = 'charlie'
+
+      const result = generateRoster(
+        events,
+        members,
+        [],
+        [],
+        rosterConstraints,
+        rosterPreferences,
+        rosterPeriod
+      )
+
+      // Both manual assignments survive untouched and stay unflagged.
+      expect(result.events[0].roster[1].member_id).toBe('charlie')
+      expect(result.events[1].roster[1].member_id).toBe('charlie')
+      expect(result.events[0].roster[1].isGenerated).toBeFalsy()
+      expect(result.events[1].roster[1].isGenerated).toBeFalsy()
+    })
+
     it('should provide generation statistics', () => {
       const members = createTestMembers()
       const events = createTestEvents()
@@ -619,6 +646,41 @@ describe('Roster Generator', () => {
       const a = run()
       const b = run()
       expect(JSON.stringify(a.events)).toBe(JSON.stringify(b.events))
+    })
+
+    it('avoids consecutive-weekend rostering in the whole-roster objective', () => {
+      // Two consecutive Sundays, one vm slot each, two interchangeable vm
+      // members. ONLY_ONCE_PER_WEEK is off, so a single member COULD legally
+      // take both weekends — but AVOID_CONSECUTIVE_WEEKS is a Phase-2 objective
+      // term now, so the optimizer must split them across the two members.
+      const members = [
+        { id: 'ann', name: 'Ann', include: true, roles: ['vm'] },
+        { id: 'ben', name: 'Ben', include: true, roles: ['vm'] },
+      ]
+      const events = [
+        { name: 'S1', date: '2026-02-01', day_of_week: 'Sunday', reporting_time: '09:00', roster: [{ role: 'vm', member_id: null }] },
+        { name: 'S2', date: '2026-02-08', day_of_week: 'Sunday', reporting_time: '09:00', roster: [{ role: 'vm', member_id: null }] },
+      ]
+      const constraints = {
+        [CONSTRAINT_KEYS.ENFORCE_MEMBER_ROLES]: true,
+        [CONSTRAINT_KEYS.ENFORCE_MEMBER_AVAILABILITY]: true,
+        [CONSTRAINT_KEYS.ONLY_ONCE_PER_EVENT]: true,
+        // ONLY_ONCE_PER_WEEK deliberately OFF so the split must come from the
+        // consecutive-weekend objective, not the weekly hard constraint.
+        [CONSTRAINT_KEYS.MAX_ASSIGNMENTS_PER_MONTH]: 5,
+      }
+      const preferences = { [PREFERENCE_KEYS.AVOID_CONSECUTIVE_WEEKS]: true }
+
+      const result = generateRoster(
+        events, members, [], [],
+        constraints, preferences, rosterPeriod
+      )
+
+      const first = result.events[0].roster[0].member_id
+      const second = result.events[1].roster[0].member_id
+      expect(first).toBeTruthy()
+      expect(second).toBeTruthy()
+      expect(first).not.toBe(second)
     })
   })
 })

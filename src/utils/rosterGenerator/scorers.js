@@ -16,7 +16,7 @@
  *
  * `ctx` (scoring context) provides everything a scorer needs without coupling
  * it to the engine internals:
- *   { tracker, memberPreferences, memberAvailability, rosterPreferences, event }
+ *   { tracker, memberPreferences, rosterPreferences, event }
  * `candidate` is { memberId, role }.
  */
 
@@ -30,7 +30,6 @@ import { areConsecutiveWeekends } from '../constraintChecking'
  */
 export const SCORING_WEIGHTS = {
   fairness: 300,              // Highest priority: balance workload
-  availability: 300,          // Prioritize rostering members with lower availability first
   consecutiveWeekends: 200,   // Avoid consecutive weekends
   dayPreference: 120,         // Member day preferences (member-level overrides roster-level)
   rolePreference: 120,        // Member role preferences (member-level preference)
@@ -46,11 +45,6 @@ const always = () => true
  * summed) but is kept readable / grouped by priority.
  */
 export const SCORERS = [
-  {
-    key: 'availability',
-    enabled: always,
-    score: (ctx) => availabilityScore(ctx.memberAvailability, ctx.candidate.memberId),
-  },
   {
     key: 'fairness',
     // Historically fairness carried an extra 10x emphasis over its base weight.
@@ -124,22 +118,6 @@ function fairnessScore(tracker, memberId) {
   // Members with fewer assignments get higher scores
   if (maxCount === minCount) return 1.0
   return 1.0 - ((assignmentCount - minCount) / (maxCount - minCount))
-}
-
-function availabilityScore(memberAvailability, memberId) {
-  if (!memberAvailability || Object.keys(memberAvailability).length === 0) {
-    return 0.5 // Neutral if availability not calculated
-  }
-
-  const memberAvailable = memberAvailability[memberId]
-  const allAvailabilities = Object.values(memberAvailability)
-  const minAvailable = Math.min(...allAvailabilities)
-  const maxAvailable = Math.max(...allAvailabilities)
-
-  if (maxAvailable === minAvailable) return 0.5 // All equal
-
-  // Invert: members with FEWER available dates get HIGHER scores
-  return 1.0 - ((memberAvailable - minAvailable) / (maxAvailable - minAvailable))
 }
 
 function spreadScore(tracker, memberId, eventDate) {

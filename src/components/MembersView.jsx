@@ -4,17 +4,27 @@ import { WarningBanner, MemberCard } from './SharedComponents'
 export default function MembersView({ members, roles, roleColorMap, warnings, searchQuery, memberConstraints, memberPreferences }) {
   const [selectedRole, setSelectedRole] = useState('All')
 
-  const activeMembers = members.filter(m => m.include !== false)
   const searchLower = searchQuery.toLowerCase()
-  
-  const filteredMembers = activeMembers
-    .filter(m => 
-      (selectedRole === 'All' || m.roles?.includes(selectedRole)) &&
+  const isActive = (m) => m.include !== false
+
+  // A member matches a selected role if they can perform it OR are training for
+  // it as an understudy.
+  const matchesRole = (m, role) =>
+    role === 'All' || m.roles?.includes(role) || m.understudyFor?.includes(role)
+
+  // Show everyone (active + inactive), inactive members sorted last and marked
+  // as such on their card.
+  const filteredMembers = members
+    .filter(m =>
+      matchesRole(m, selectedRole) &&
       (!searchQuery || m.name.toLowerCase().includes(searchLower) || m.telegram?.toLowerCase().includes(searchLower))
     )
-    .sort((a, b) => a.name.localeCompare(b.name))
+    .sort((a, b) =>
+      (isActive(a) === isActive(b)) ? a.name.localeCompare(b.name) : (isActive(a) ? -1 : 1)
+    )
 
-  const roleCount = (role) => role === 'All' ? activeMembers.length : activeMembers.filter(m => m.roles?.includes(role)).length
+  // Counts reflect active members only (inactive members aren't rostered).
+  const roleCount = (role) => members.filter(m => isActive(m) && matchesRole(m, role)).length
 
   return (
     <div className="p-6">

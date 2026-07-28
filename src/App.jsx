@@ -6,6 +6,7 @@ import { generateRoster } from './utils/rosterGenerator'
 import { getDerivedState } from './utils/derivedState'
 import { useRosterData } from './hooks/useRosterData'
 import { isMemberUnavailable } from './utils/constraintsUtils'
+import { canFillSlotRole, isUnderstudyRole, isPromotedForRole } from './utils/understudy'
 import { getActiveConstraints, getActivePreferences, getConstraintDescription, getPreferenceDescription, MEMBER_PREF_FIELDS } from './schema/rosterSchema'
 import { ErrorDisplay } from './components/SharedComponents'
 import MembersView from './components/MembersView'
@@ -27,6 +28,8 @@ function App({ auth }) {
   const [generationResult, setGenerationResult] = useState(null)
   const [swapNotice, setSwapNotice] = useState(null)
   const [pendingSwap, setPendingSwap] = useState(null) // { nextEvents, logEntry, message } awaiting confirmation
+  const [pendingRemoveSlot, setPendingRemoveSlot] = useState(null) // { nextEvents, prompt, message } awaiting confirmation
+  const [pendingClearGenerated, setPendingClearGenerated] = useState(null) // { nextEvents, count, prompt, message } awaiting confirmation
 
   // Custom hook for all data management (consolidated state)
   const roster = useRosterData()
@@ -248,7 +251,12 @@ function App({ auth }) {
       if (!memberId) return true // clearing a slot is always valid
       const member = memberById(memberId)
       if (!member || member.include === false) return false
-      if (!member.roles?.includes(slot.role)) return false
+      // Role compatibility. For a real role, a trainee counts only once they've
+      // been promoted (completed an understudy session for it on an earlier
+      // date) — same rule the assignment dropdown uses.
+      const roleOk = canFillSlotRole(member, slot.role) ||
+        (!isUnderstudyRole(slot.role) && isPromotedForRole(member, slot.role, events, event.date))
+      if (!roleOk) return false
       if (isMemberUnavailable(memberId, event.date, memberConstraints)) return false
       // No duplicate member within the same event.
       const clash = event.roster.some((r, i) =>
@@ -312,6 +320,94 @@ function App({ auth }) {
     updateEvents(pendingSwap.nextEvents)
     logAction({ level: 'info', category: 'swap', group: 'manual', message: pendingSwap.message })
     setPendingSwap(null)
+  }
+
+  // Add a new (unassigned) role requirement to an event. Non-destructive, so
+  // it applies immediately. Ignores roles already present on the event.
+  const handleAddRosterSlot = (eventDate, role) => {
+    if (!role) return
+    let added = false
+    const nextEvents = events.map(event => {
+      if (event.date !== eventDate) return event
+      const roster = event.roster || []
+      if (roster.some(slot => slot.role === role)) return event // no duplicate roles
+      added = true
+      return { ...event, roster: [...roster, { role, member_id: null }] }
+    })
+    if (!added) return
+    const event = events.find(e => e.date === eventDate)
+    saveToHistory(events)
+    updateEvents(nextEvents)
+    logAction({
+      level: 'info', category: 'insert', group: 'manual',
+      message: `Added ${role} role to ${eventDate}${event ? ` ${event.name}` : ''}`,
+    })
+  }
+
+  // Apply the staged role-slot removal after the user confirms. Removing an
+  // entire role requirement is destructive, so it is staged for confirmation.
+  const confirmRemoveSlot = () => {
+    if (!pendingRemoveSlot) return
+    saveToHistory(events)
+    updateEvents(pendingRemoveSlot.nextEvents)
+    logAction({ level: 'info', category: 'delete', group: 'manual', message: pendingRemoveSlot.message })
+    setPendingRemoveSlot(null)
+  }
+
+  // Stage the removal of an entire role slot from an event for confirmation.
+  const handleRemoveRosterSlot = (eventDate, roleIndex) => {
+    const event = events.find(e => e.date === eventDate)
+    const slot = event?.roster?.[roleIndex]
+    if (!slot) return
+
+    const nameOf = (id) => members.find(m => m.id === id)?.name || id
+    const nextEvents = events.map(e => {
+      if (e.date !== eventDate) return e
+      return { ...e, roster: e.roster.filter((_, idx) => idx !== roleIndex) }
+    })
+
+    const occupant = slot.member_id ? ` (currently ${nameOf(slot.member_id)})` : ''
+    setPendingRemoveSlot({
+      nextEvents,
+      prompt: `Remove the ${slot.role} role?`,
+      message: `Removes the ${slot.role} role from ${event.date} ${event.name}${occupant}.`,
+    })
+  }
+
+  // Clear all auto-generated assignments (slots tagged isGenerated), leaving
+  // their role requirements in place but unassigned. Manual assignments are
+  // untouched. Staged for confirmation since it's destructive.
+  const handleClearGenerated = () => {
+    let count = 0
+    const nextEvents = events.map(event => {
+      if (!event.roster?.some(s => s.isGenerated)) return event
+      const nextRoster = event.roster.map(slot => {
+        if (!slot.isGenerated) return slot
+        count++
+        const { isGenerated, ...rest } = slot
+        return { ...rest, member_id: null }
+      })
+      return { ...event, roster: nextRoster }
+    })
+    if (count === 0) return
+    setPendingClearGenerated({
+      nextEvents,
+      count,
+      prompt: `Remove ${count} generated assignment${count > 1 ? 's' : ''}?`,
+      message: 'Clears every assignment tagged "generated", leaving the role slots empty. Manual assignments are kept.',
+    })
+  }
+
+  // Apply the staged clear-generated action after the user confirms.
+  const confirmClearGenerated = () => {
+    if (!pendingClearGenerated) return
+    saveToHistory(events)
+    updateEvents(pendingClearGenerated.nextEvents)
+    logAction({
+      level: 'info', category: 'delete', group: 'manual',
+      message: `Removed ${pendingClearGenerated.count} generated assignment${pendingClearGenerated.count > 1 ? 's' : ''}`,
+    })
+    setPendingClearGenerated(null)
   }
 
   // Check if there are unassigned roles
@@ -513,6 +609,9 @@ function App({ auth }) {
             validationResults={validationResults}
             onEditRosterSlot={permissions.canEditRoster ? handleEditRosterSlot : undefined}
             onSwapRosterSlots={permissions.canEditRoster ? handleSwapRosterSlots : undefined}
+            onAddRosterSlot={permissions.canEditRoster ? handleAddRosterSlot : undefined}
+            onRemoveRosterSlot={permissions.canEditRoster ? handleRemoveRosterSlot : undefined}
+            onClearGenerated={permissions.canEditRoster ? handleClearGenerated : undefined}
             yamlData={data}
           />
         </div>
@@ -596,6 +695,56 @@ function App({ auth }) {
                 className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 touch-manipulation"
               >
                 Confirm
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Role-slot removal confirmation (removes an entire role requirement) */}
+      {pendingRemoveSlot && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" onClick={() => setPendingRemoveSlot(null)}>
+          <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-2xl" onClick={e => e.stopPropagation()}>
+            <p className="text-base font-semibold text-gray-900">{pendingRemoveSlot.prompt}</p>
+            <p className="mt-1 text-sm text-gray-600">{pendingRemoveSlot.message}</p>
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setPendingRemoveSlot(null)}
+                className="rounded-lg px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-100 touch-manipulation"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmRemoveSlot}
+                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 touch-manipulation"
+              >
+                Remove
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Clear-generated confirmation (removes all auto-generated assignments) */}
+      {pendingClearGenerated && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" onClick={() => setPendingClearGenerated(null)}>
+          <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-2xl" onClick={e => e.stopPropagation()}>
+            <p className="text-base font-semibold text-gray-900">{pendingClearGenerated.prompt}</p>
+            <p className="mt-1 text-sm text-gray-600">{pendingClearGenerated.message}</p>
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setPendingClearGenerated(null)}
+                className="rounded-lg px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-100 touch-manipulation"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmClearGenerated}
+                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 touch-manipulation"
+              >
+                Remove
               </button>
             </div>
           </div>

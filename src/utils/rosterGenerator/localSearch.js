@@ -83,8 +83,9 @@ function findBestMove(state, eligibilityChecker, evaluate, currentScore) {
     }
   }
 
-  // 2. Swap moves: exchange occupants of two filled slots.
-  const filled = slots.filter(s => state.getOccupant(s))
+  // 2. Swap moves: exchange occupants of two filled slots. Pre-assigned
+  // (manually authored) slots are locked and never moved or overwritten.
+  const filled = slots.filter(s => state.getOccupant(s) && !state.isLocked(s))
   for (let i = 0; i < filled.length; i++) {
     for (let j = i + 1; j < filled.length; j++) {
       const slotA = filled[i]

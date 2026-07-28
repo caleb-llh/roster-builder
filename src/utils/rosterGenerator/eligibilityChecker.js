@@ -4,11 +4,10 @@
 
 import { 
   checkMemberAvailability,
-  checkMemberRoleCompatibility,
   isAssignedToEvent
 } from '../constraintChecking'
 import { CONSTRAINT_KEYS, isConstraintEnabled, getConstraintValue } from '../../schema/rosterSchema'
-import { isUnderstudyRole, baseRoleOf, understudySlotRole, UNDERSTUDY_MIN_SESSIONS } from '../understudy'
+import { isUnderstudyRole, understudySlotRole, baseRoleOf, UNDERSTUDY_MIN_SESSIONS, isRoleCapable } from '../understudy'
 
 export class EligibilityChecker {
   constructor(members, constraints, rosterConstraints, tracker) {
@@ -35,16 +34,30 @@ export class EligibilityChecker {
     
     // Check ENFORCE_MEMBER_ROLES
     if (isConstraintEnabled(this.rosterConstraints, CONSTRAINT_KEYS.ENFORCE_MEMBER_ROLES)) {
-      if (!this._canPerformRole(member, role)) {
+      if (!isRoleCapable(member, role)) {
         return { eligible: false, reason: `Member cannot perform role: ${role}` }
       }
     }
 
     // Check ENFORCE_UNDERSTUDY_BEFORE_ROLE: a trainee for base role X may only
     // be assigned to the real role X after understudying it (>= N sessions on
-    // strictly earlier dates).
+    // strictly earlier dates). Conversely, understudy sessions are capped: once
+    // a trainee has completed their N sessions they are considered qualified,
+    // so further "X-understudy" assignments are blocked (they should perform the
+    // real role instead of understudying again).
     if (isConstraintEnabled(this.rosterConstraints, CONSTRAINT_KEYS.ENFORCE_UNDERSTUDY_BEFORE_ROLE)) {
-      if (!isUnderstudyRole(role) && (member.understudyFor || []).includes(role)) {
+      if (isUnderstudyRole(role)) {
+        const baseRole = baseRoleOf(role)
+        if ((member.understudyFor || []).includes(baseRole)) {
+          const priorSessions = this.tracker.getRoleCountBefore(memberId, role, event.date)
+          if (priorSessions >= UNDERSTUDY_MIN_SESSIONS) {
+            return {
+              eligible: false,
+              reason: `Member has already completed ${UNDERSTUDY_MIN_SESSIONS} understudy session(s) for ${baseRole} and no longer needs to understudy`,
+            }
+          }
+        }
+      } else if ((member.understudyFor || []).includes(role)) {
         const priorSessions = this.tracker.getRoleCountBefore(memberId, understudySlotRole(role), event.date)
         if (priorSessions < UNDERSTUDY_MIN_SESSIONS) {
           return {
@@ -88,23 +101,24 @@ export class EligibilityChecker {
     
     return { eligible: true, reason: null }
   }
-  
-  /**
-   * Whether a member is role-compatible with a slot role (ignoring the
-   * understudy-ordering gate, which is enforced separately).
-   *
-   * - Real role X: member fully performs X (X in member.roles) OR is training
-   *   for X (understudyFor). Trainees are role-compatible so ENFORCE_MEMBER_ROLES
-   *   passes; the ENFORCE_UNDERSTUDY_BEFORE_ROLE gate then decides whether they
-   *   have understudied enough to actually take it.
-   * - Understudy slot X-understudy: member qualifies if they can perform X OR
-   *   are training for X.
-   */
-  _canPerformRole(member, role) {
-    const base = isUnderstudyRole(role) ? baseRoleOf(role) : role
-    return checkMemberRoleCompatibility(member, base) || (member.understudyFor || []).includes(base)
-  }
 
+  /**
+   * Lightweight look-ahead used by understudy seeding: could this trainee
+   * plausibly PERFORM the real `role` on `event`, assuming they will have
+   * completed their understudy session by then? Checks availability, role
+   * capability and once-per-event — but deliberately ignores the
+   * understudy-before-role gate (seeding is what will satisfy it) so we can
+   * tell whether seeding this trainee here would actually pay off later.
+   */
+  canBePromotedTo(memberId, role, event) {
+    const member = this.members.find(m => m.id === memberId)
+    if (!member || member.include === false) return false
+    if (!isRoleCapable(member, role)) return false
+    if (!checkMemberAvailability(memberId, event.date, this.memberConstraints)) return false
+    if (isAssignedToEvent(memberId, (event.roster || []).filter(s => s.member_id))) return false
+    return true
+  }
+  
   /**
    * Get all eligible members for a role on an event
    */

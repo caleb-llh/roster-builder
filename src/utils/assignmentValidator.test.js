@@ -484,4 +484,70 @@ describe('assignmentValidator', () => {
       expect(result['2026-02-15'].errors[0]).toContain('Alice is assigned to multiple roles: vm, cam-1, cam-2')
     })
   })
+
+  describe('ENFORCE_UNDERSTUDY_BEFORE_ROLE constraint', () => {
+    const understudyMembers = [
+      // Trainee for multi-vm (understudyFor), performs vm.
+      { id: 'dana', name: 'Dana', roles: ['vm'], understudyFor: ['multi-vm'] },
+      // Full performer of multi-vm.
+      { id: 'fred', name: 'Fred', roles: ['multi-vm'], understudyFor: [] }
+    ]
+    const rosterConstraints = { [CONSTRAINT_KEYS.ENFORCE_UNDERSTUDY_BEFORE_ROLE]: true }
+
+    it('flags a trainee rostered for the real role before any understudy session', () => {
+      const events = [{
+        date: '2026-02-15',
+        day_of_week: 'Sunday',
+        roster: [{ role: 'multi-vm', member_id: 'dana' }]
+      }]
+
+      const result = validateEventAssignments(events, understudyMembers, [], [], rosterConstraints, {})
+
+      expect(result['2026-02-15']).toBeDefined()
+      expect(result['2026-02-15'].errors.some(e => e.includes('Dana') && e.includes('understudy for multi-vm'))).toBe(true)
+    })
+
+    it('allows a trainee once they have completed an earlier understudy session (promoted)', () => {
+      const events = [
+        {
+          date: '2026-02-08',
+          day_of_week: 'Sunday',
+          roster: [{ role: 'multi-vm-understudy', member_id: 'dana' }]
+        },
+        {
+          date: '2026-02-15',
+          day_of_week: 'Sunday',
+          roster: [{ role: 'multi-vm', member_id: 'dana' }]
+        }
+      ]
+
+      const result = validateEventAssignments(events, understudyMembers, [], [], rosterConstraints, {})
+
+      expect(result['2026-02-15']).toBeUndefined()
+    })
+
+    it('never flags a full performer of the real role', () => {
+      const events = [{
+        date: '2026-02-15',
+        day_of_week: 'Sunday',
+        roster: [{ role: 'multi-vm', member_id: 'fred' }]
+      }]
+
+      const result = validateEventAssignments(events, understudyMembers, [], [], rosterConstraints, {})
+
+      expect(result['2026-02-15']).toBeUndefined()
+    })
+
+    it('does nothing when the constraint is disabled', () => {
+      const events = [{
+        date: '2026-02-15',
+        day_of_week: 'Sunday',
+        roster: [{ role: 'multi-vm', member_id: 'dana' }]
+      }]
+
+      const result = validateEventAssignments(events, understudyMembers, [], [], {}, {})
+
+      expect(result['2026-02-15']).toBeUndefined()
+    })
+  })
 })

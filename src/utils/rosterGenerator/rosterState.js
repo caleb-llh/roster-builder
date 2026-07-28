@@ -34,6 +34,20 @@ export class RosterState {
     return this.getSlot(slot)?.member_id ?? null
   }
 
+  /**
+   * A slot is "locked" if local search must never move or overwrite it:
+   *  - a pre-assigned (manually authored) member — filled but NOT generated; or
+   *  - a promotion pinned by the promotion-planning phase (`_pinnedPromotion`),
+   *    which secured a trainee's real-role slot up front; letting search swap it
+   *    away would waste the promotion the phase deliberately reserved.
+   */
+  isLocked(slot) {
+    const roleAssignment = this.getSlot(slot)
+    if (!roleAssignment?.member_id) return false
+    if (roleAssignment._pinnedPromotion) return true
+    return !roleAssignment.isGenerated
+  }
+
   /** All slots across all events, in (event, role) order. */
   allSlots() {
     const slots = []

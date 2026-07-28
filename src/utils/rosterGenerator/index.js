@@ -1,18 +1,31 @@
 /**
  * Roster Generation Algorithm
  *
- * Generates assignments for unassigned roles in two phases:
+ * Generates assignments for unassigned roles in ordered phases:
+ *
+ * Phase 0 — Understudy seeding (`understudySeeding.js`, gated by
+ *   ENFORCE_UNDERSTUDY_BEFORE_ROLE):
+ *   - Pre-fill understudy slots so trainees shadow early, choosing whoever can
+ *     be promoted soonest afterwards.
+ *
+ * Phase 0.5 — Promotion planning (`promotionPlanning.js`, gated by
+ *   ENFORCE_UNDERSTUDY_BEFORE_ROLE):
+ *   - Backtrack over unlocked trainees to reserve later real-role slots that
+ *     maximise the number of promotions; pin them so Phase 2 won't swap them.
  *
  * Phase 1 — Greedy construction (initial solution):
  *   - Initialize tracking of existing assignments
- *   - Process events chronologically
+ *   - Process events chronologically (understudy slots before real roles)
  *   - For each unassigned role: find eligible members (hard constraints),
  *     score them (soft preferences, seeded tie-break), assign the best via the
  *     reversible move layer
  *
  * Phase 2 — Local search (optimization):
  *   - Hill-climb by applying the best improving move (member↔member swap or
- *     filling an empty slot) until no improving move exists
+ *     filling an empty slot) until no improving move exists, against the
+ *     whole-roster objective in `evaluateState` (fairness, spread, day/role
+ *     preferences, consecutive-weekend avoidance, empty slots). Every soft goal
+ *     that biases Phase 1 must also appear here, or local search can undo it.
  *
  * A fixed seed keeps output deterministic. Every meaningful decision is captured
  * by a verbose ActionLogger and returned as result.log / result.logEntries.
@@ -27,6 +40,11 @@ import { RosterState } from './rosterState'
 import { optimizeRoster } from './localSearch'
 import { createRng } from './rng'
 import { ActionLogger, NULL_LOGGER } from './actionLog'
+import { seedUnderstudySlots } from './understudySeeding'
+import { planPromotions, clearPromotionPins } from './promotionPlanning'
+import { isUnderstudyRole } from '../understudy'
+import { areConsecutiveWeekends } from '../constraintChecking'
+import { CONSTRAINT_KEYS, PREFERENCE_KEYS, isConstraintEnabled, isPreferenceEnabled } from '../../schema/rosterSchema'
 
 /**
  * Main entry point.
@@ -67,7 +85,7 @@ export function generateRoster(
   // Restore chronological event order
   result.events.sort((a, b) => new Date(a.date) - new Date(b.date))
 
-  const quality = calculateRosterQuality(result, memberPreferences)
+  const quality = calculateRosterQuality(result, memberPreferences, rosterPreferences)
   logger.success(`Generation complete (quality ${quality.toFixed(2)})`)
 
   result.quality = quality
@@ -97,11 +115,6 @@ function generateRosterSingleRun(
   const eligibilityChecker = new EligibilityChecker(members, memberConstraints, rosterConstraints, tracker)
   const scoringEngine = new ScoringEngine(rosterPreferences, memberPreferences, tracker)
   
-  // Calculate member availability (count how many events each member is available for)
-  const memberAvailability = calculateMemberAvailability(members, memberConstraints, events)
-  scoringEngine.setMemberAvailability(memberAvailability)
-  logger.debug('Member availability (events available for)', memberAvailability)
-  
   // Clone events to avoid mutating original
   const newEvents = JSON.parse(JSON.stringify(events))
   
@@ -119,6 +132,20 @@ function generateRosterSingleRun(
     generatedAssignments: 0,
     unassignableRoles: []
   }
+
+  // --- Phase 0: seed understudy shadowing slots ---
+  // Proactively create "X-understudy" opportunities for trainees so the
+  // ENFORCE_UNDERSTUDY_BEFORE_ROLE gate can later unlock the real role.
+  if (isConstraintEnabled(rosterConstraints, CONSTRAINT_KEYS.ENFORCE_UNDERSTUDY_BEFORE_ROLE)) {
+    const seeded = seedUnderstudySlots(sortedEvents, members, eligibilityChecker, tracker, { logger })
+    if (seeded > 0) logger.info(`Phase 0 done: seeded ${seeded} understudy slot(s)`)
+
+    // --- Phase 0.5: plan promotions (backtracking) ---
+    // Secure real-role slots for as many unlocked trainees as possible up front,
+    // before greedy spends their limited monthly budget on ordinary slots.
+    const promoted = planPromotions(sortedEvents, members, eligibilityChecker, tracker, { logger })
+    if (promoted > 0) logger.info(`Phase 0.5 done: planned ${promoted} promotion(s)`)
+  }
   
   // --- Phase 1: greedy construction (initial solution) ---
   logger.debug('Phase 1: greedy construction')
@@ -128,8 +155,20 @@ function generateRosterSingleRun(
     // Get current roster (what's already assigned in this event)
     const currentRoster = event.roster.filter(r => r.member_id)
     
-    // Process each role in the event
-    event.roster.forEach((roleAssignment, roleIndex) => {
+    // Process each role in the event. Understudy ("X-understudy") slots are
+    // processed BEFORE real slots so trainees get their shadow session locked
+    // in first; their promotion into the real role is handled up front by the
+    // Phase 0.5 promotion planner. Original slot indices are preserved so moves
+    // target the correct roster entry.
+    const orderedSlots = event.roster
+      .map((roleAssignment, roleIndex) => ({ roleAssignment, roleIndex }))
+      .sort((a, b) => {
+        const au = isUnderstudyRole(a.roleAssignment.role) ? 0 : 1
+        const bu = isUnderstudyRole(b.roleAssignment.role) ? 0 : 1
+        return au - bu
+      })
+
+    orderedSlots.forEach(({ roleAssignment, roleIndex }) => {
       stats.totalRoles++
       
       // Skip if already assigned
@@ -186,14 +225,14 @@ function generateRosterSingleRun(
   // Hill-climb until no improving move exists (with a safety iteration cap).
   if (localSearch) {
     logger.debug('Phase 2: local search')
-    const before = evaluateState(state, memberPreferences)
+    const before = evaluateState(state, memberPreferences, rosterPreferences)
     const { iterations } = optimizeRoster(
       state,
       eligibilityChecker,
-      (s) => evaluateState(s, memberPreferences),
+      (s) => evaluateState(s, memberPreferences, rosterPreferences),
       { logger }
     )
-    const after = evaluateState(state, memberPreferences)
+    const after = evaluateState(state, memberPreferences, rosterPreferences)
     recomputeStats(sortedEvents, stats)
     logger.info(
       `Phase 2 done: ${iterations} iteration(s), ` +
@@ -201,6 +240,9 @@ function generateRosterSingleRun(
     )
   }
   
+  // Pins were only needed to protect planned promotions during local search.
+  clearPromotionPins(sortedEvents)
+
   return {
     events: newEvents,
     stats,
@@ -244,10 +286,11 @@ function recomputeStats(events, stats) {
  * Calculate overall roster quality score (higher is better).
  * Wrapper kept for multi-start selection; delegates to evaluateState.
  */
-function calculateRosterQuality(result, memberPreferences) {
+function calculateRosterQuality(result, memberPreferences, rosterPreferences) {
   return evaluateState(
     { events: result.events, tracker: { getFairnessScore: () => result.fairnessMetrics.assignmentStdDev, getSpreadScore: () => result.fairnessMetrics.spreadStdDev } },
-    memberPreferences
+    memberPreferences,
+    rosterPreferences
   )
 }
 
@@ -256,7 +299,7 @@ function calculateRosterQuality(result, memberPreferences) {
  * RosterState-like object ({ events, tracker }). Shared by the multi-start
  * selection and the local-search loop so both optimize the same objective.
  */
-function evaluateState(state, memberPreferences) {
+function evaluateState(state, memberPreferences, rosterPreferences) {
   const { events, tracker } = state
 
   // Count preference violations and unfilled slots.
@@ -281,6 +324,17 @@ function evaluateState(state, memberPreferences) {
     })
   })
 
+  // Consecutive-weekend violations across the WHOLE roster (gated by the
+  // AVOID_CONSECUTIVE_WEEKS preference). Phase 1's per-candidate scorer only
+  // biases greedy construction; counting it here makes Phase 2 local search
+  // also minimise it (otherwise a swap could re-introduce a consecutive-weekend
+  // pairing the objective was blind to — the same "heuristic that never entered
+  // the Phase-2 objective" trap as the removed availability scorer).
+  const consecutiveWeekendViolations =
+    isPreferenceEnabled(rosterPreferences, PREFERENCE_KEYS.AVOID_CONSECUTIVE_WEEKS)
+      ? countConsecutiveWeekendViolations(events)
+      : 0
+
   // Weight-based penalty (lower cost = better quality). Reuses the shared
   // SCORING_WEIGHTS so quality selection stays aligned with the per-candidate
   // scoring engine.
@@ -289,6 +343,7 @@ function evaluateState(state, memberPreferences) {
     tracker.getSpreadScore() * SCORING_WEIGHTS.spread +
     dayPrefViolations * SCORING_WEIGHTS.dayPreference +
     rolePrefViolations * SCORING_WEIGHTS.rolePreference +
+    consecutiveWeekendViolations * SCORING_WEIGHTS.consecutiveWeekends +
     emptySlots * 1000        // Heavily penalize unfilled roles
 
   // Return negative cost (so higher = better)
@@ -296,27 +351,27 @@ function evaluateState(state, memberPreferences) {
 }
 
 /**
- * Calculate how many events each member is available for
- * Lower availability = more unavailable dates = higher priority
+ * Count, across all events, how many times a member is rostered on two
+ * consecutive weekends. Each such pair contributes one violation. Computed by
+ * scanning per-member assignment dates so it reflects the whole roster (not a
+ * "last assignment" pointer), making it safe for local-search re-evaluation.
  */
-function calculateMemberAvailability(members, memberConstraints, events) {
-  const availability = {}
-  
-  members.forEach(member => {
-    const memberConstraint = memberConstraints.find(c => c.member_id === member.id)
-    const unavailableDates = memberConstraint?.unavailable_dates || []
-    
-    // Count how many events this member is available for
-    let availableCount = 0
-    events.forEach(event => {
-      if (!unavailableDates.includes(event.date)) {
-        availableCount++
-      }
+function countConsecutiveWeekendViolations(events) {
+  const datesByMember = {}
+  events.forEach(event => {
+    event.roster?.forEach(assignment => {
+      if (!assignment.member_id) return
+      ;(datesByMember[assignment.member_id] ||= []).push(event.date)
     })
-    
-    availability[member.id] = availableCount
   })
-  
-  return availability
+
+  let violations = 0
+  Object.values(datesByMember).forEach(dates => {
+    const sorted = [...new Set(dates)].sort()
+    for (let i = 1; i < sorted.length; i++) {
+      if (areConsecutiveWeekends(sorted[i - 1], sorted[i])) violations++
+    }
+  })
+  return violations
 }
 

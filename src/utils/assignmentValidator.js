@@ -18,6 +18,7 @@ import {
   areConsecutiveWeekends
 } from './constraintChecking'
 import { CONSTRAINT_KEYS, PREFERENCE_KEYS, isConstraintEnabled, isPreferenceEnabled, MEMBER_PREF_FIELDS, getConstraintValue } from '../schema/rosterSchema'
+import { isUnderstudyRole, countUnderstudySessionsBefore, UNDERSTUDY_MIN_SESSIONS } from './understudy'
 
 /**
  * Check if member is assigned on unavailable date
@@ -36,6 +37,38 @@ const checkUnavailabilityViolation = (event, memberConstraints, members) => {
     }
   })
   
+  return errors
+}
+
+/**
+ * Check that a member assigned to a REAL role X is allowed to take it: either
+ * they fully perform X, or (if they are only a TRAINEE for X) they have
+ * completed at least UNDERSTUDY_MIN_SESSIONS understudy sessions for X on
+ * strictly-earlier dates (i.e. they have been "promoted"). Flags any trainee
+ * placed in the real role before promotion. Gated by
+ * ENFORCE_UNDERSTUDY_BEFORE_ROLE.
+ */
+const checkUnderstudyBeforeRole = (event, allEvents, rosterConstraints, members) => {
+  const errors = []
+
+  if (!event.roster || !Array.isArray(event.roster)) return errors
+  if (!isConstraintEnabled(rosterConstraints, CONSTRAINT_KEYS.ENFORCE_UNDERSTUDY_BEFORE_ROLE)) return errors
+
+  event.roster.forEach(assignment => {
+    if (!assignment.member_id || isUnderstudyRole(assignment.role)) return
+    const member = members.find(m => m.id === assignment.member_id)
+    if (!member) return
+
+    const fullyPerforms = (member.roles || []).includes(assignment.role)
+    const isTrainee = (member.understudyFor || []).includes(assignment.role)
+    if (fullyPerforms || !isTrainee) return
+
+    const sessions = countUnderstudySessionsBefore(member.id, assignment.role, allEvents, event.date)
+    if (sessions < UNDERSTUDY_MIN_SESSIONS) {
+      errors.push(`${member.name || member.id} is an understudy for ${assignment.role} and must complete at least ${UNDERSTUDY_MIN_SESSIONS} understudy session before being rostered for the actual role`)
+    }
+  })
+
   return errors
 }
 
@@ -185,7 +218,8 @@ export const validateEventAssignments = (events, members, memberConstraints, mem
     const errors = [
       ...checkRosterPeriodViolation(event, rosterPeriod),
       ...checkUnavailabilityViolation(event, memberConstraints, members),
-      ...checkRosterConstraints(event, events, rosterConstraints, members)
+      ...checkRosterConstraints(event, events, rosterConstraints, members),
+      ...checkUnderstudyBeforeRole(event, events, rosterConstraints, members)
     ]
     
     const warnings = [

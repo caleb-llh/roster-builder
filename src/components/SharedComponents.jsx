@@ -155,11 +155,11 @@ export const MemberCard = ({ member, roleColorMap, memberConstraints, memberPref
   }
   
   return (
-    <div className="bg-white/40 backdrop-blur-md rounded-lg shadow-lg border border-white/30 p-4 hover:shadow-xl hover:bg-white/50 transition-all">
+    <div className={`bg-white/40 backdrop-blur-md rounded-lg shadow-lg border border-white/30 p-4 hover:shadow-xl hover:bg-white/50 transition-all ${member.include === false ? 'opacity-60' : ''}`}>
       <div className="flex items-center justify-between mb-3">
         <h3 className="text-lg font-semibold text-gray-900">{member.name}</h3>
         {member.include === false && (
-          <span className="px-2 py-1 text-xs font-medium bg-red-100 text-red-800 rounded">Excluded</span>
+          <span className="px-2 py-1 text-xs font-medium bg-gray-200 text-gray-600 rounded">Inactive</span>
         )}
       </div>
       {member.telegram && (
@@ -171,6 +171,15 @@ export const MemberCard = ({ member, roleColorMap, memberConstraints, memberPref
         {member.roles?.map((role, i) => (
           <span key={i} className={`px-2 py-1 text-xs font-medium rounded-full ${roleColorMap[role] || 'bg-gray-100 text-gray-800'}`}>
             {role}
+          </span>
+        ))}
+        {member.understudyFor?.map((role, i) => (
+          <span
+            key={`u-${i}`}
+            title={`Training as understudy for ${role}`}
+            className={`px-2 py-1 text-xs font-medium rounded-full border border-dashed border-current opacity-70 ${roleColorMap[role] || 'bg-gray-100 text-gray-800'}`}
+          >
+            {role} (understudy)
           </span>
         ))}
       </div>

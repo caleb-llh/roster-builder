@@ -4,37 +4,62 @@ Automated roster generation algorithm that fills unassigned roles while maximizi
 
 ## Architecture
 
-The roster generator uses **greedy construction followed by local search**, with
-a pluggable weighted-scoring registry and reversible move primitives:
+The roster generator uses **promotion-aware seeding, greedy construction, then
+local search**, with a pluggable weighted-scoring registry and reversible move
+primitives:
 
 ```
 src/utils/rosterGenerator/
-├── index.js                 # Main entry point (greedy init + local search + multi-start)
+├── index.js                 # Main entry point (seed + plan + greedy init + local search)
+├── understudySeeding.js     # Phase 0: promotion-aware understudy seeding
+├── promotionPlanning.js     # Phase 0.5: backtracking promotion planner (maximise promotions)
 ├── assignmentTracker.js     # Tracks assignment state (reversible: record/removeAssignment)
-├── rosterState.js           # Reversible slot/move layer (applyMove/revertMove, applySwap)
-├── eligibilityChecker.js    # Validates hard constraints
+├── rosterState.js           # Reversible slot/move layer (applyMove/revertMove, applySwap, isLocked)
+├── eligibilityChecker.js    # Validates hard constraints (+ understudy gate + canBePromotedTo)
 ├── scorers.js               # Pluggable scorer registry + SCORING_WEIGHTS
 ├── scoringEngine.js         # Thin adapter that ranks candidates via scorers.js
-├── localSearch.js           # Hill-climbing optimizer (swaps + fill-empty)
+├── localSearch.js           # Hill-climbing optimizer (swaps + fill-empty, skips locked)
 ├── rng.js                   # Seeded PRNG (deterministic randomization)
 ├── actionLog.js             # Verbose action logger (result.log / logEntries)
 └── rosterGenerator.test.js  # Comprehensive test suite
 ```
+
+> Understudy semantics (`../understudy.js`) — the `X-understudy` slot suffix,
+> `UNDERSTUDY_MIN_SESSIONS`, `canFillSlotRole` vs `isRoleCapable` — and the full
+> rationale for the cap/promotion/seeding decisions live in the root
+> [README → Design Decisions](../../../README.md#design-decisions-binding-spec),
+> which is the **binding spec**.
 
 ## Algorithm Flow
 
 A single seeded pass (reproducible / deterministic):
 
 1. **Initialize Tracking** - Load existing assignments into tracker
-2. **Phase 1 — Greedy construction** (initial solution):
+2. **Phase 0 — Understudy seeding** (`understudySeeding.js`): pre-fill understudy
+   slots so trainees shadow early. Base-role-centric with lookahead — at each
+   shadowing opportunity it picks the still-needed trainee who can be *promoted
+   soonest* afterwards (`EligibilityChecker.canBePromotedTo`).
+3. **Phase 0.5 — Promotion planning** (`promotionPlanning.js`): before greedy can
+   spend a trainee's limited monthly budget, **backtrack** over all unlocked
+   trainees to promote as many as possible into later real base-role slots
+   (maximise the count), honouring hard constraints. Each tentative promotion is
+   recorded/reverted in the tracker during the search so the caps stay accurate.
+   Committed promotions are pinned so local search won't undo them.
+4. **Phase 1 — Greedy construction** (initial solution):
    - Sort events chronologically
-   - For each unassigned role: find eligible members (hard constraints),
+   - Within each event, process **understudy slots before real slots**
+   - For each unassigned slot: find eligible members (hard constraints),
      score them (soft preferences, with a seeded tie-break shuffle), assign the
      best via the reversible move layer
-3. **Phase 2 — Local search**: hill-climb by applying the single best *improving*
+5. **Phase 2 — Local search**: hill-climb by applying the single best *improving*
    move (member↔member swap, or filling an empty slot) until no improving move
    exists (or a safety iteration cap is hit). Every candidate is validated
-   against hard constraints and applied reversibly.
+   against hard constraints and applied reversibly. **Locked (pre-assigned,
+   non-generated) slots and pinned promotions are excluded from swaps.** The
+   objective is the whole-roster `evaluateState`: fairness, spread, day/role
+   preference violations, **consecutive-weekend avoidance** (gated by
+   `AVOID_CONSECUTIVE_WEEKS`), and empty slots — every soft goal that biases
+   Phase 1's greedy scoring must also appear here or local search can undo it.
 
 Every decision is recorded by a verbose logger and returned as
 `result.log` (text lines) and `result.logEntries` (structured) for debugging.
@@ -70,6 +95,15 @@ Validates hard constraints (must satisfy):
 - `ONLY_ONCE_PER_EVENT` - No duplicate assignments per event
 - `ONLY_ONCE_PER_WEEK` - Max one assignment per week (Monday-Sunday)
 - `MAX_ASSIGNMENTS_PER_MONTH` - Monthly assignment limit
+- `ENFORCE_UNDERSTUDY_BEFORE_ROLE` - Understudy gate (bidirectional):
+  - can't perform a real role before completing `UNDERSTUDY_MIN_SESSIONS`
+    understudy sessions for it (strictly earlier dates), and
+  - can't take another understudy slot once the cap (`= 1`) is reached
+    (hard-block, so trainees get promoted rather than shadow forever).
+
+Also exposes `canBePromotedTo(memberId, role, event)` — a lookahead probe
+(capability + availability + not-already-assigned; ignores the understudy gate)
+used by Phase 0 seeding to rank promotable trainees.
 
 ### ScoringEngine
 Scores based on soft preferences (optimize for). Weights live in a single
@@ -80,13 +114,23 @@ the roster-quality evaluation so the two never drift apart:
 | Factor | Weight | Description |
 |--------|--------|-------------|
 | **Fairness** | 300 | Prefer members with fewer total assignments |
-| **Availability** | 300 | Prioritize members with fewer available dates |
 | **Consecutive Weekends** | 200 | Avoid back-to-back weekends |
 | **Day Preference** | 120 | Match member's preferred days |
 | **Role Preference** | 120 | Match member's preferred roles |
 | **Role Diversity** | 60 | Encourage variety of roles per member |
 | **Spread** | 60 | Prefer longer gaps since last assignment |
 | **Day Balance** | 60 | Balance assignments across different days for member |
+
+> **Promotions are not a scorer.** Promoting understudies into their real role
+> is handled entirely by the Phase 0.5 promotion planner (a hard, up-front
+> reservation), not by scoring. A scorer can't help once a trainee is blocked by
+> the monthly cap, so relying on one was confusing and redundant — it was
+> removed.
+>
+> **Availability is not a scorer either.** It was removed — availability is a
+> *hard constraint* (`ENFORCE_MEMBER_AVAILABILITY`), not a workload objective,
+> and it never survived local search. Do not re-introduce either as a scorer.
+> See the root [README → Design Decisions](../../../README.md#understudy-feature).
 
 ## Usage
 
@@ -120,7 +164,6 @@ Adjust the exported `SCORING_WEIGHTS` in `scorers.js`:
 ```javascript
 export const SCORING_WEIGHTS = {
   fairness: 300,
-  availability: 300,
   consecutiveWeekends: 200,
   dayPreference: 120,
   rolePreference: 120,

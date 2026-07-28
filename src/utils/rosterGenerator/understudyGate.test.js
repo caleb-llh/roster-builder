@@ -31,8 +31,9 @@ describe('Understudy before role', () => {
   })
 
   it('does not assign a trainee to the real role before understudying it', () => {
-    // Only Dana can do multi-vm, and she is merely a trainee. There is no
-    // understudy slot, so the multi-vm slot must remain unfilled.
+    // Only Dana can do multi-vm, and she is merely a trainee. The single event
+    // is on the same date as any seeded understudy slot, so the strictly-earlier
+    // gate keeps the real multi-vm slot unfilled.
     const members = [
       { id: 'dana', name: 'Dana', include: true, roles: [], understudyFor: ['multi-vm'] },
     ]
@@ -42,7 +43,8 @@ describe('Understudy before role', () => {
       events, members, [], [], constraints(), {}, rosterPeriod
     )
 
-    expect(result.events[0].roster[0].member_id).toBeNull()
+    const realSlot = result.events[0].roster.find(r => r.role === 'multi-vm')
+    expect(realSlot.member_id).toBeNull()
   })
 
   it('lets a trainee fill an understudy slot, then the real role afterwards', () => {
@@ -109,5 +111,47 @@ describe('Understudy before role', () => {
 
     // With the gate off, a trainee is treated as a full performer.
     expect(result.events[0].roster[0].member_id).toBe('dana')
+  })
+
+  it('caps understudy at one session: a second understudy slot is not re-filled by the same trainee', () => {
+    // Dana understudies on the first date; the second understudy slot must NOT
+    // go to her again (she is already qualified) — it stays empty since she is
+    // the only trainee.
+    const members = [
+      { id: 'dana', name: 'Dana', include: true, roles: [], understudyFor: ['multi-vm'] },
+    ]
+    const events = [
+      evt('2026-02-01', ['multi-vm-understudy']),
+      evt('2026-02-08', ['multi-vm-understudy']),
+    ]
+
+    const result = generateRoster(
+      events, members, [], [], constraints(), {}, rosterPeriod
+    )
+
+    expect(result.events[0].roster[0].member_id).toBe('dana')
+    // Already completed her one session -> blocked from understudying again.
+    expect(result.events[1].roster[0].member_id).toBeNull()
+  })
+
+  it('prefers promoting an unlocked trainee into the real role over a full performer', () => {
+    // Dana trains for multi-vm and understudies on the first date. On the later
+    // date both Dana (now unlocked) and Fred (full performer) are eligible for
+    // the real role; the promote-understudy preference should pick Dana.
+    const members = [
+      { id: 'dana', name: 'Dana', include: true, roles: [], understudyFor: ['multi-vm'] },
+      { id: 'fred', name: 'Fred', include: true, roles: ['multi-vm'], understudyFor: [] },
+    ]
+    const events = [
+      evt('2026-02-01', ['multi-vm-understudy']),
+      evt('2026-02-08', ['multi-vm']),
+    ]
+
+    const result = generateRoster(
+      events, members, [], [], constraints(), {}, rosterPeriod
+    )
+
+    expect(result.events[0].roster[0].member_id).toBe('dana')
+    expect(result.events[1].roster[0].member_id).toBe('dana')
   })
 })

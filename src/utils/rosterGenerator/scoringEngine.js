@@ -14,15 +14,7 @@ export class ScoringEngine {
     this.rosterPreferences = rosterPreferences
     this.memberPreferences = memberPreferences
     this.tracker = tracker
-    this.memberAvailability = {} // Will be set by setMemberAvailability()
     this.weights = SCORING_WEIGHTS
-  }
-
-  /**
-   * Set member availability data (called during initialization)
-   */
-  setMemberAvailability(availability) {
-    this.memberAvailability = availability
   }
 
   /**
@@ -33,7 +25,6 @@ export class ScoringEngine {
     const ctx = {
       tracker: this.tracker,
       memberPreferences: this.memberPreferences,
-      memberAvailability: this.memberAvailability,
       rosterPreferences: this.rosterPreferences,
       event,
       candidate: { memberId, role },

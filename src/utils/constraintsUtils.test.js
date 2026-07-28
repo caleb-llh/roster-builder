@@ -134,5 +134,44 @@ describe('constraintsUtils', () => {
       
       expect(result).toEqual({})
     })
+
+    describe('promoted understudies in real-role slots', () => {
+      const uMembers = [
+        { id: 'perf', name: 'Perf', roles: ['multi-vm'], understudyFor: [] },
+        { id: 'trainee', name: 'Trainee', roles: ['vm'], understudyFor: ['multi-vm'] },
+      ]
+      const allEvents = [
+        { date: '2026-02-01', roster: [{ role: 'multi-vm-understudy', member_id: 'trainee' }] },
+        { date: '2026-02-08', roster: [{ role: 'multi-vm', member_id: null }] },
+      ]
+
+      it('lists a promoted trainee for a real role once they have understudied earlier', () => {
+        const result = getAvailableMembersForEvent(allEvents[1], uMembers, [], allEvents)
+        const ids = result['multi-vm'].map(m => m.id)
+        expect(ids).toContain('trainee')
+        const trainee = result['multi-vm'].find(m => m.id === 'trainee')
+        expect(trainee.isUnderstudy).toBe(true)
+        // Full performers are not marked as understudies.
+        expect(result['multi-vm'].find(m => m.id === 'perf').isUnderstudy).toBe(false)
+      })
+
+      it('excludes a trainee who has not yet understudied (understudy-before-role)', () => {
+        // First event only — the trainee has no earlier understudy session.
+        const result = getAvailableMembersForEvent(allEvents[0], uMembers, [], allEvents)
+        // The multi-vm-understudy slot lists the trainee (they may fill it)...
+        expect(result['multi-vm-understudy'].map(m => m.id)).toContain('trainee')
+        // ...but there is no real multi-vm slot in this event to be promoted into.
+        const noPriorSessions = getAvailableMembersForEvent(
+          { date: '2026-02-08', roster: [{ role: 'multi-vm', member_id: null }] },
+          uMembers, [], [allEvents[1]] // only the later event: no earlier understudy
+        )
+        expect(noPriorSessions['multi-vm'].map(m => m.id)).not.toContain('trainee')
+      })
+
+      it('falls back to performers-only when allEvents is omitted', () => {
+        const result = getAvailableMembersForEvent(allEvents[1], uMembers, [])
+        expect(result['multi-vm'].map(m => m.id)).toEqual(['perf'])
+      })
+    })
   })
 })

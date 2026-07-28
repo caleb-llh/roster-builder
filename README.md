@@ -13,7 +13,7 @@ Components never branch on the mode — they read data and call mutations throug
 
 - **Frontend**: React 18 + Vite 5
 - **Styling**: Tailwind CSS 3
-- **Testing**: Vitest + jsdom (167 tests)
+- **Testing**: Vitest + jsdom (206 tests)
 - **YAML**: js-yaml, with CodeMirror for editing
 - **Backend (production mode)**: Supabase (Postgres + Row-Level Security + Auth)
 
@@ -22,7 +22,7 @@ Components never branch on the mode — they read data and call mutations throug
 ```bash
 npm install                # Install dependencies
 npm run dev                # Dev server → localhost:5173
-npm test                   # Run tests (167 passing)
+npm test                   # Run tests (206 passing)
 npm run test:coverage      # Coverage report
 npm run build              # Production build
 npm run preview            # Test production build locally
@@ -132,14 +132,87 @@ A document only needs to specify the keys it wants to override. **Roles are inte
 
 ### Generation algorithm
 
-**Greedy construction followed by local search:**
+**Promotion-aware seeding, greedy construction, then local search:**
 
-1. **Greedy** — score eligible members per slot (availability, fairness, spread, day prefs), assign the best with a seeded tie-break, apply via a reversible move layer.
-2. **Local search** — hill-climb by applying the best *improving* move (member↔member swap or empty-slot fill), each validated against hard constraints and applied reversibly, until no improving move remains.
+0. **Seeding** — pre-fill understudy slots so trainees shadow early, choosing whoever can be promoted soonest (see [Design Decisions → Understudy feature](#understudy-feature)).
+0.5. **Promotion planning** — backtrack to promote as many unlocked trainees into later real-role slots as possible before greedy spends their monthly budget; pin those slots.
+1. **Greedy** — for each event, score eligible members per slot (fairness, spread, day prefs), understudy slots first, assign the best with a seeded tie-break, apply via a reversible move layer.
+2. **Local search** — hill-climb by applying the best *improving* move (member↔member swap or empty-slot fill), each validated against hard constraints and applied reversibly, until no improving move remains. **Locked (pre-assigned) slots are never moved.**
 
 A fixed seed keeps generation deterministic. Every decision is captured by a verbose logger and surfaced as an "Algorithm log" in the result dialog.
 
 See [`src/utils/rosterGenerator/README.md`](src/utils/rosterGenerator/README.md) for scoring weights and details.
+
+## Design Decisions (binding spec)
+
+This section is the **binding specification** for non-obvious behavior. It records *why* the system works the way it does so that future changes don't silently regress a decision that was made deliberately. **Changing any behavior described here requires updating this section in the same change** (see [`AGENTS.md`](AGENTS.md)).
+
+### Data structure: `event.roster` is a positional array
+
+`event.roster` is an **array** of slot objects `{ role, member_id, isGenerated? }` — *not* a role-keyed map. This is intentional so a role can appear multiple times in one event (e.g. two `support` slots, or a role plus its understudy). Any view that needs a role→member lookup must group into positional buckets (`byRole[role][index]`) rather than collapsing to a single value per role, or duplicate slots disappear.
+
+- Export **and** the on-screen Table view compute an `exportColumns` layout: for each role, the max count across all events → that many numbered columns; understudy roles get their own columns; cells are filled positionally from the per-event `byRole` buckets.
+
+### Generated vs. locked (pre-assigned) slots
+
+- A slot with `isGenerated: true` was placed by the generator and may be freely moved/replaced.
+- A slot that is **filled and *not* `isGenerated`** is a **manually pre-assigned ("locked") slot**. `RosterState.isLocked(slot)` identifies these.
+- A generated slot may also be **pinned** (`slot._pinnedPromotion`) by the promotion-planning phase; pinned slots are treated as locked for the duration of the run (transient — stripped before results are returned).
+- **Local search must never move a locked slot.** Phase 2 swap enumeration excludes locked slots (`slots.filter(s => getOccupant(s) && !isLocked(s))`). Pre-assigned members are respected as hard commitments.
+
+### Understudy feature
+
+The system supports **understudies**: members training to perform a role, who must shadow it before performing it for real.
+
+**Model** (`src/utils/understudy.js`):
+- A member has `{ roles, understudyFor }`. `understudyFor: ["multi-vm"]` means "training to perform `multi-vm`".
+- An understudy **slot** uses the suffix convention: `multi-vm-understudy` (`understudySlotRole(base)` / `baseRoleOf(slot)` / `isUnderstudyRole(slot)`).
+- Two distinct role-compatibility rules exist and must not be conflated:
+  - **`canFillSlotRole`** (UI): who may fill a slot from scratch — for an understudy slot, trainees only; for a real role, full performers only.
+  - **`isRoleCapable`** (generator): a trainee counts as capable of the base role for lookahead/promotion purposes.
+
+**Manual assignment dropdown includes promoted understudies.** The slot picker (`getAvailableMembersForEvent`) lists, for a real role `X`: full performers, **plus** any trainee who has already **completed an understudy session for `X` on an earlier date in the roster** (`isPromotedForRole` → `countUnderstudySessionsBefore`). Those trainees are tagged "understudy" in the list. This mirrors the generator's promotions so a human can reproduce/adjust them; trainees who haven't understudied yet stay out, honouring understudy-before-role. The same promotion-aware check gates drag-and-drop (`canOccupy` in `App.jsx`). No data-structure change was needed — `roles` + `understudyFor` already model this; the UI simply consults the event history.
+
+**Hard constraints** (`eligibilityChecker.js`, gated by `ENFORCE_UNDERSTUDY_BEFORE_ROLE`):
+- **Understudy-before-role**: a member may not be assigned a real role until they have completed `UNDERSTUDY_MIN_SESSIONS` understudy sessions for it, on **strictly earlier** dates.
+- **Understudy cap = 1** (`UNDERSTUDY_MIN_SESSIONS = 1`): once a trainee has completed their required understudy session, they are **hard-blocked** from further understudy slots for that role. Rationale: repeatedly shadowing without ever being promoted (the "Ozborn understudied twice, never performed" bug) is wasteful — one session is enough to become eligible.
+
+**Assignment-time validation mirrors the gate** (`assignmentValidator.js`, `checkUnderstudyBeforeRole`, gated by the same `ENFORCE_UNDERSTUDY_BEFORE_ROLE`): the generator's eligibility check only guards *generated* rosters, but slots can also be filled/edited/dragged by hand. So the validator independently flags any member who is only a **trainee** for a real role `X` (in `understudyFor`, not `roles`) but has **not** completed an understudy session for `X` on a strictly-earlier date (`countUnderstudySessionsBefore < UNDERSTUDY_MIN_SESSIONS`). Full performers and promoted trainees are never flagged. This surfaces "understudy rostered for the actual role before promotion" as an error in the UI regardless of how the assignment was made.
+
+**Promotion** — handled by the Phase 0.5 promotion planner (below), **not** by scoring:
+- Once trainees are unlocked (have done their understudy session but not yet performed the real role), the planner reserves later real-role slots for as many of them as possible, up front.
+- There is deliberately **no promotion scorer**. A soft score can't help once a trainee is hard-blocked by the monthly cap (see the Phase 0.5 rationale), so the earlier `promoteUnderstudy` scorer was **removed** to avoid confusion — promotion is a hard, planned reservation, not a preference.
+
+**Phase 0 — promotion-aware seeding** (`understudySeeding.js`):
+- Before greedy construction, understudy slots are seeded so trainees get their required shadowing early. Seeding is **base-role-centric with lookahead**, not member-order greedy.
+- For each base role, it tracks trainees still needing a session, walks events chronologically, and at each shadowing opportunity picks the trainee who can be **promoted soonest** afterwards — ranked by `EligibilityChecker.canBePromotedTo(memberId, baseRole, laterEvent)` (capability + availability + not-already-assigned, deliberately *ignoring* the understudy gate since seeding is what satisfies it).
+- Rationale: naive member-order seeding parked a trainee (e.g. denise) who was unavailable at the next real event, wasting the promotion chain. Promotion-aware seeding matches the hand-tuned reference (2 promotions instead of 1).
+
+**Phase 0.5 — promotion planning (backtracking)** (`promotionPlanning.js`):
+- Being *eligible* to perform the real role isn't enough to actually get promoted. Greedy fills events chronologically and `MAX_ASSIGNMENTS_PER_MONTH` (default **2**) is a hard cap, so a trainee's monthly budget can be spent on ordinary slots **before** their real-role opportunity arrives — leaving them capped out and unable to be promoted. The `promoteUnderstudy` scorer can't help once the trainee is hard-blocked.
+- This dedicated phase runs right after seeding. Across the whole population of unlocked trainees it **backtracks** to find the assignment of trainees→later real base-role slots that **maximises the number of promoted trainees**, honouring all hard constraints (it re-uses `EligibilityChecker.isEligible` and records/reverts each tentative promotion in the tracker so monthly/weekly counters stay accurate during the search — a static bipartite matching won't do because assignments interact through the caps).
+- Chosen promotions are committed as generated slots and **pinned** (`slot._pinnedPromotion`) so Phase 2 local search won't swap them away. The pin is transient and stripped before results are returned.
+- Rationale: the real "promotions not maximised" bug — jia-lin understudied Sep 26 and *was* eligible for the Oct 31 real multi-vm, but greedy had already spent her 2 October slots on ordinary roles, so the monthly cap blocked the promotion. Securing promotions up front achieves 2 promotions (matching the reference) instead of 1.
+
+**Phase 1 — understudy slots first**: within each event, understudy slots are scored/filled **before** real-role slots (`orderedSlots` sorts understudy roles ahead), so trainees are scheduled before the roles that depend on them.
+
+**Members view**: the role filter includes understudies — filtering by `multi-vm` shows both performers and `multi-vm` trainees (`matchesRole` checks `roles` *and* `understudyFor`).
+
+### Table & export column order (real roles first, understudies last)
+
+The Table view and the CSV / "Copy to Excel" exports use one shared column layout (`exportColumnLayout` in `EventsView.jsx`). Columns are ordered **metadata → all real roles → all understudy columns**: date, day, reporting time, event name, then every real role (in catalog order, duplicates numbered e.g. `roving-cam 2`), then every `X-understudy` column at the end. Rationale: an understudy column right after each real role interleaved trainees with performers and made the "who is actually rostered vs. who is shadowing" split hard to scan; grouping the understudy columns at the end matches how the roster is read (performers first, understudies as a trailing block). **Missing slots render `-`** (not blank) in the table and exports so an empty cell is unambiguous.
+
+### Consecutive-weekend avoidance is a Phase-2 objective term, not just a Phase-1 bias
+
+`AVOID_CONSECUTIVE_WEEKS` is enforced in **two** places that must stay in sync: the per-candidate `consecutiveWeekends` scorer (weight `200`) that biases Phase-1 greedy construction, **and** the whole-roster objective `evaluateState` (`index.js`), which counts consecutive-weekend pairs across the roster (`countConsecutiveWeekendViolations`, weighted by `SCORING_WEIGHTS.consecutiveWeekends`, gated by the same preference). Rationale: Phase-2 local search only optimises what `evaluateState` measures. If a soft goal exists only as a Phase-1 scorer, a later swap can freely re-introduce the thing it was meant to avoid — exactly the trap that made the availability scorer useless (below). **Invariant: every soft goal that biases greedy scoring must also appear as a term in `evaluateState`, or local search can undo it.**
+
+### Availability is a constraint, not an objective (removed scorer)
+
+The `availability` scorer (which prioritized members with fewer available dates) was **removed**. It was a Phase-1 greedy heuristic that never appeared in the Phase-2 objective, so it couldn't survive local search and caused confusing workload imbalance. Availability is properly a **hard eligibility constraint** (`ENFORCE_MEMBER_AVAILABILITY`), not a fairness objective. Do not re-introduce it as a scorer.
+
+### Determinism
+
+Generation is deterministic: a fixed seed drives all tie-breaks (`rng.js`). Every decision is captured by a verbose logger surfaced as the "Algorithm log" in the result dialog.
 
 ## Developer Notes
 
@@ -231,7 +304,7 @@ roster_preferences:
 3. **Logic**: implement in `eligibilityChecker.js` (hard) or `scoringEngine.js` (soft).
 4. **Validation**: add a check in `assignmentValidator.js` if needed.
 5. **Tests**: write tests using the schema constants.
-6. **Docs**: update this README and `public/sample.yaml`.
+6. **Docs**: update this README and `public/sample.yaml`. If the change makes or reverses a design decision, record it under [Design Decisions](#design-decisions-binding-spec) — this is required, not optional (see [`AGENTS.md`](AGENTS.md)).
 
 ### Testing
 
