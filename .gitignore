@@ -25,6 +25,8 @@ dist-ssr
 
 *requirements.yaml*
 
+local/
+
 # Env
 .env
 .env.*

@@ -4,6 +4,39 @@ import { getCardColorForDay, formatDate } from '../utils/colorUtils'
 import { exportToYAML, downloadYAML } from '../utils/dataExport'
 import RosterSlotPill from './RosterSlotPill'
 
+/**
+ * Copy text to the clipboard, returning true on success.
+ *
+ * Uses the async Clipboard API when available (HTTPS / localhost), and falls
+ * back to a hidden <textarea> + execCommand('copy') otherwise (e.g. insecure
+ * origins, older browsers, or when the async write is blocked/rejected).
+ */
+async function copyText(text) {
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text)
+      return true
+    }
+  } catch {
+    // fall through to the legacy path
+  }
+
+  try {
+    const textarea = document.createElement('textarea')
+    textarea.value = text
+    textarea.setAttribute('readonly', '')
+    textarea.style.position = 'fixed'
+    textarea.style.top = '-9999px'
+    document.body.appendChild(textarea)
+    textarea.select()
+    const ok = document.execCommand('copy')
+    document.body.removeChild(textarea)
+    return ok
+  } catch {
+    return false
+  }
+}
+
 export default function EventsView({ events, members, memberConstraints, roleColorMap, searchQuery, validationResults, roles, onEditRosterSlot, onSwapRosterSlots, yamlData }) {
   const [expandedEvent, setExpandedEvent] = useState(null)
   const [viewMode, setViewMode] = useState('cards') // 'cards' or 'table'
@@ -208,11 +241,11 @@ export default function EventsView({ events, members, memberConstraints, roleCol
       header.join('\t'),
       ...data.map(row => row.join('\t'))
     ].join('\n')
-    
-    try {
-      await navigator.clipboard.writeText(tsvContent)
+
+    const ok = await copyText(tsvContent)
+    if (ok) {
       alert('Table copied to clipboard! You can now paste it into Excel or Google Sheets.')
-    } catch (err) {
+    } else {
       alert('Failed to copy to clipboard. Please try again.')
     }
   }

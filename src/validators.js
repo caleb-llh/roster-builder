@@ -2,6 +2,8 @@
  * Validation Builder for extensible validation rules
  */
 
+import { normalizeMemberRoles, understudySlotRole, isUnderstudyRole, baseRoleOf } from './utils/understudy'
+
 export class ValidationBuilder {
   constructor(data) {
     this.data = data
@@ -117,10 +119,10 @@ export const validateRoles = (data) => {
 
   if (!data?.members) return { errors, warnings }
 
-  let validRoles
+  let baseRoles
   if (data.roles && Array.isArray(data.roles)) {
-    validRoles = data.roles.map(r => r.name || r).filter(Boolean)
-    if (validRoles.length === 0) {
+    baseRoles = data.roles.map(r => r.name || r).filter(Boolean).filter(r => !isUnderstudyRole(r))
+    if (baseRoles.length === 0) {
       errors.push('Roles section is empty or invalid')
       return { errors, warnings }
     }
@@ -129,24 +131,75 @@ export const validateRoles = (data) => {
     return { errors, warnings }
   }
 
+  // The valid set auto-includes the understudy variant of every base role.
+  const validRoles = new Set([...baseRoles, ...baseRoles.map(understudySlotRole)])
+
   data.members.forEach((member, index) => {
     const memberRef = `${member.name || `Member #${index + 1}`}`
-    
+
     if (member.roles) {
-      member.roles.forEach(role => {
-        if (!validRoles.includes(role)) {
+      const { roles, understudyFor } = normalizeMemberRoles(member.roles)
+      const declared = [...roles, ...understudyFor]
+
+      declared.forEach(role => {
+        if (!validRoles.has(role)) {
           errors.push(
             `${memberRef}: Invalid role "${role}" - not found in declared roles. ` +
-            `Valid roles are: ${validRoles.join(', ')}`
+            `Valid roles are: ${[...validRoles].join(', ')}`
           )
         }
       })
 
-      const uniqueRoles = new Set(member.roles)
-      if (uniqueRoles.size !== member.roles.length) {
+      // Detect duplicates from the RAW list (normalization dedupes, so we
+      // compare the raw role names by their resolved base/understudy identity).
+      const rawNames = (Array.isArray(member.roles) ? member.roles : [])
+        .map(r => (typeof r === 'string' ? r : r?.name))
+        .filter(Boolean)
+      if (new Set(rawNames).size !== rawNames.length) {
         warnings.push(`${memberRef}: Has duplicate roles`)
       }
     }
+  })
+
+  return { errors, warnings }
+}
+
+/**
+ * Warn about understudy misconfiguration:
+ * - a member trains for role X but no X-understudy slot exists in any event
+ *   (they could never satisfy the gate to unlock X).
+ */
+export const validateUnderstudy = (data) => {
+  const errors = []
+  const warnings = []
+
+  if (!data?.members) return { errors, warnings }
+
+  // Collect all understudy slot roles that appear in events.
+  const understudySlotsInEvents = new Set()
+  if (Array.isArray(data.events)) {
+    data.events.forEach(event => {
+      if (Array.isArray(event.roster)) {
+        event.roster.forEach(slot => {
+          if (slot?.role && isUnderstudyRole(slot.role)) {
+            understudySlotsInEvents.add(baseRoleOf(slot.role))
+          }
+        })
+      }
+    })
+  }
+
+  data.members.forEach((member, index) => {
+    const memberRef = `${member.name || `Member #${index + 1}`}`
+    const { understudyFor } = normalizeMemberRoles(member.roles)
+    understudyFor.forEach(role => {
+      if (!understudySlotsInEvents.has(role)) {
+        warnings.push(
+          `${memberRef}: is an understudy for "${role}" but no "${understudySlotRole(role)}" slot exists in any event, ` +
+          `so they can never unlock the "${role}" role`
+        )
+      }
+    })
   })
 
   return { errors, warnings }
@@ -307,6 +360,7 @@ export const runAllValidators = (data) => {
     .validate(validateMembers)
     .validate(validateTelegramHandles)
     .validate(validateRoles)
+    .validate(validateUnderstudy)
     .validate(validateEventMemberMapping)
     .validate(validateRosterPeriod)
     .validate(validateMemberConstraints)

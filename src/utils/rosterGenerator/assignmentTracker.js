@@ -11,6 +11,7 @@ export class AssignmentTracker {
     // Track assignments per member
     this.memberAssignments = {}
     this.memberRoleAssignments = {}
+    this.memberRoleDates = {}
     members.forEach(m => {
       if (m.include !== false) {
         this.memberAssignments[m.id] = {
@@ -21,6 +22,7 @@ export class AssignmentTracker {
           dates: []
         }
         this.memberRoleAssignments[m.id] = {}
+        this.memberRoleDates[m.id] = {}
       }
     })
     
@@ -59,6 +61,8 @@ export class AssignmentTracker {
     // Track role assignments
     if (role && this.memberRoleAssignments[memberId]) {
       this.memberRoleAssignments[memberId][role] = (this.memberRoleAssignments[memberId][role] || 0) + 1
+      if (!this.memberRoleDates[memberId][role]) this.memberRoleDates[memberId][role] = []
+      insertSorted(this.memberRoleDates[memberId][role], date)
     }
   }
   
@@ -84,6 +88,11 @@ export class AssignmentTracker {
     
     if (role && this.memberRoleAssignments[memberId]) {
       decrement(this.memberRoleAssignments[memberId], role)
+      const roleDates = this.memberRoleDates[memberId]?.[role]
+      if (roleDates) {
+        const idx = roleDates.indexOf(date)
+        if (idx !== -1) roleDates.splice(idx, 1)
+      }
     }
   }
   
@@ -110,6 +119,22 @@ export class AssignmentTracker {
   
   getRoleAssignmentCount(memberId, role) {
     return this.memberRoleAssignments[memberId]?.[role] || 0
+  }
+
+  /**
+   * Dates (ascending) on which a member was assigned a specific role.
+   * Used by the understudy-before-role gate to count prior understudy sessions.
+   */
+  getRoleDates(memberId, role) {
+    return this.memberRoleDates[memberId]?.[role] || []
+  }
+
+  /**
+   * Count assignments of a role for a member strictly BEFORE the given date.
+   */
+  getRoleCountBefore(memberId, role, date) {
+    const cutoff = new Date(date).getTime()
+    return this.getRoleDates(memberId, role).filter(d => new Date(d).getTime() < cutoff).length
   }
   
   // Get fairness metric: standard deviation of assignment counts

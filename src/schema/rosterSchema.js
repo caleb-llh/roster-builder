@@ -28,6 +28,7 @@ export const CONSTRAINT_KEYS = {
   ONLY_ONCE_PER_EVENT: 'ONLY_ONCE_PER_EVENT',
   ONLY_ONCE_PER_WEEK: 'ONLY_ONCE_PER_WEEK',
   MAX_ASSIGNMENTS_PER_MONTH: 'MAX_ASSIGNMENTS_PER_MONTH',
+  ENFORCE_UNDERSTUDY_BEFORE_ROLE: 'ENFORCE_UNDERSTUDY_BEFORE_ROLE',
 }
 
 // Coercion functions per constraint value. Return the coerced value, or null
@@ -44,6 +45,7 @@ const constraintCoercers = {
   [CONSTRAINT_KEYS.ONLY_ONCE_PER_EVENT]: coerceBoolean,
   [CONSTRAINT_KEYS.ONLY_ONCE_PER_WEEK]: coerceBoolean,
   [CONSTRAINT_KEYS.MAX_ASSIGNMENTS_PER_MONTH]: coerceNonNegativeInt,
+  [CONSTRAINT_KEYS.ENFORCE_UNDERSTUDY_BEFORE_ROLE]: coerceBoolean,
 }
 
 export const CONSTRAINT_METADATA = {
@@ -76,6 +78,12 @@ export const CONSTRAINT_METADATA = {
     description: 'Members will not exceed the specified monthly assignment limit',
     userFriendly: "Members won't exceed the specified monthly assignment limit",
     type: 'integer',
+  },
+  [CONSTRAINT_KEYS.ENFORCE_UNDERSTUDY_BEFORE_ROLE]: {
+    label: 'Understudy Before Role',
+    description: 'A member training for a role must be scheduled as its understudy before performing it',
+    userFriendly: 'Trainees must understudy a role before performing it',
+    type: 'boolean',
   },
 }
 

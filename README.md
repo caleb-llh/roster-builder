@@ -1,244 +1,241 @@
 # Roster Builder v2
 
-Automated roster scheduling system that assigns team members to events while respecting hard constraints and optimizing for fairness preferences.
+Automated roster scheduling that assigns team members to events while respecting hard constraints and optimizing for fairness preferences.
+
+The same bundle runs in **two modes**, chosen at build time:
+
+- **Local playground** (default): a login-free, in-memory YAML editor. Nothing is persisted; great for experimenting and for the public GitHub Pages deployment.
+- **Production**: backed by [Supabase](https://supabase.com) with Google auth, a Postgres database, per-roster roles (RBAC), and an in-app admin flow. Enabled only when Supabase env vars are present.
+
+Components never branch on the mode — they read data and call mutations through a uniform **provider contract** and gate UI on **permission flags**. See [Architecture](#architecture).
 
 ## Tech Stack
 
 - **Frontend**: React 18 + Vite 5
 - **Styling**: Tailwind CSS 3
-- **Testing**: Vitest + jsdom
-- **Data**: YAML (js-yaml), URL state (lz-string), localStorage
-- **Editor**: CodeMirror for YAML editing
+- **Testing**: Vitest + jsdom (167 tests)
+- **YAML**: js-yaml, with CodeMirror for editing
+- **Backend (production mode)**: Supabase (Postgres + Row-Level Security + Auth)
 
 ## Quick Start
 
 ```bash
 npm install                # Install dependencies
 npm run dev                # Dev server → localhost:5173
-npm test                   # Run tests (190 passing)
+npm test                   # Run tests (167 passing)
 npm run test:coverage      # Coverage report
 npm run build              # Production build
 npm run preview            # Test production build locally
 ```
 
+With no environment variables set, the app runs entirely as the local YAML playground — no account, no backend.
+
 ## Development Workflow
 
-**Daily Development** (use 99% of the time):
+**Daily development** (use 99% of the time):
 ```bash
 npm run dev                # → http://localhost:5173 (no base path)
 ```
 
-**Test Production Build** (before deploying):
+**Test the production build** (before deploying):
 ```bash
-npm run build              # Build with GitHub Pages config
-npm run preview            # → http://localhost:4173/roster-builder/ (with base path)
+npm run build              # Build with GitHub Pages base path
+npm run preview            # → http://localhost:4173/roster-builder/
 ```
 
 **Deploy to GitHub Pages**:
 ```bash
 git add -A && git commit -m "Your message" && git push
-npm run deploy             # Deploys to https://caleb-llh.github.io/roster-builder/
+npm run deploy             # gh-pages → https://caleb-llh.github.io/roster-builder/
 ```
 
-> **Note**: The `/roster-builder/` base path only applies to production builds. Local dev runs without it.
+> The `/roster-builder/` base path only applies to production builds; local dev runs without it.
+
+## Enabling Production Mode (Supabase)
+
+Production mode activates when both env vars are set at build time (see `.env.example`):
+
+```bash
+VITE_SUPABASE_URL=...       # Supabase project URL
+VITE_SUPABASE_ANON_KEY=...  # anon/public key (safe to ship in a static bundle)
+```
+
+`detectMode()` returns `'production'` when both are present, otherwise `'local'`.
+
+**Database** lives in `supabase/migrations/`:
+- `0001_init.sql` — `rosters` (whole roster as one JSONB `document`), `roster_members` (RBAC), RLS policies, owner-membership trigger.
+- `0002_admin_rpcs.sql` — owner-guarded RPCs: create roster, set/remove member role, list members.
+- `0003_invites.sql` — email whitelist: `roster_invites`, auto-claim on signup, invite/revoke RPCs.
+
+Apply to a hosted or local project:
+```bash
+npm run db:push            # push migrations to the linked project
+npm run db:start           # (optional) run Supabase locally via Docker
+```
+
+Google OAuth is configured in the Supabase dashboard (Authentication → Providers); the app requests a redirect back to `window.location.origin + import.meta.env.BASE_URL`.
 
 ## Architecture
 
-
-### Data Flow
+### Dual-mode data layer
 
 ```
-YAML Input → Validation → State Management → Generation → UI/Export
-     ↓           ↓              ↓                  ↓          ↓
-  js-yaml    validators    useRosterData    rosterGenerator   URL/localStorage
-                              ↓
-                         getDerivedState (uses YAML_FIELDS)
+        detectMode()                (env vars decide once, at runtime)
+             │
+   ┌─────────┴──────────┐
+   ▼                    ▼
+useLocalRosterProvider   useSupabaseRosterProvider
+   │                    │
+   └────────┬───────────┘
+            ▼
+   providerContract  ← uniform shape: { data, permissions, role, rosters,
+            │            importData, updateEvents, replaceData, undo, admin RPCs… }
+            ▼
+      useRosterData()  ← the hook every component uses
+            ▼
+    UI (App, EventsView, YamlDrawer, AdminModal, …)
 ```
 
-**YAML_FIELDS Role**: The schema's `YAML_FIELDS` constants map YAML top-level keys to JavaScript object access. This is the **single source of truth** for YAML structure throughout the entire codebase:
-- ✅ **Parsing**: Used in `getDerivedState()` to extract data from parsed YAML
-- ✅ **Consistency**: Ensures all code references the same field names
-- ✅ **Refactoring**: Change the YAML structure in one place
+- **`src/data/mode.js`** — `detectMode()`.
+- **`src/hooks/useRosterData.js`** — selects the provider for the active mode and returns the contract.
+- **`src/data/providerContract.js`** — the documented shape both providers satisfy. Mutations are async and fallible (`{ ok, errors }`), so code written against the local playground already handles production realities (network / RLS / validation failures).
+- Components gate on `permissions` (`canEditRoster`, `canImport`, `canUndo`) and `role`, **never** on the mode. Local mode returns `LOCAL_PERMISSIONS` (all true, single-user sandbox); production derives them from the user's role.
 
-**Example**:
-```javascript
-// YAML file uses:           // Schema defines:
-roster:                       YAML_FIELDS.ROSTER_PERIOD: 'roster'
-  start_date: "2026-02-01"   
-  end_date: "2026-02-28"
+**Roles (production RBAC)**:
+- `owner` — everything, including import/replace YAML and the admin panel.
+- `editor` — edit assignments, generate, undo.
+- `viewer` — read-only.
 
-// Code uses schema:
-const period = data[YAML_FIELDS.ROSTER_PERIOD]  // Gets data.roster
+The YAML drawer is gated on `canImport`, so it's available in the local playground and to owners in production only.
+
+### Data flow (per roster)
+
+```
+YAML / JSONB document → getDerivedState → generation → UI
+        ↓                     ↓                ↓
+     js-yaml         merges source-code    rosterGenerator
+                      defaults + document
 ```
 
-### Generation Algorithm
+- **Local mode**: the working document lives in memory only. No URL state, no localStorage.
+- **Production mode**: the working document is a single JSONB `document` column on the roster row; mutations persist through Supabase and are protected by RLS.
 
-**Greedy construction followed by local search**:
+### Source-code defaults
 
-1. **Phase 1 — Greedy construction** (initial solution):
-   - Calculate member availability (prioritize members with fewer available dates)
-   - Load existing assignments into `AssignmentTracker`
-   - Process events chronologically
-   - For each unassigned role:
-     - `EligibilityChecker`: Filter by hard constraints (must pass)
-     - `ScoringEngine`: Score by soft preferences (availability, fairness, spread, day prefs)
-     - Assign best-scored member (seeded tie-break) via the reversible move layer
-     - Update tracker
+Roster-level **constraints** (hard rules) and **preferences** (soft goals) are policy, not data. They live in **`src/config/rosterDefaults.js`** and are merged under any values a document provides:
 
-2. **Phase 2 — Local search** (optimization):
-   - Hill-climb by applying the best *improving* move (member↔member swap, or
-     filling an empty slot), each validated against hard constraints and applied
-     reversibly, until no improving move exists
+```
+effective = { ...DEFAULT_ROSTER_CONSTRAINTS, ...document.roster_constraints }
+```
 
-**Why local search?** Greedy alone can get trapped in local optima. Local search
-then explores swaps/fills to improve the roster's quality score. A fixed seed
-keeps this deterministic — same input always produces the same output.
+A document only needs to specify the keys it wants to override. **Roles are intentionally not defaults** — they are data that belongs to a team/roster.
 
-**Debugging**: every decision (greedy assignment, eligibility rejection, each
-local-search move) is captured by a verbose logger, surfaced as a discrete
-"Algorithm log" dropdown in the generation result dialog.
+### Generation algorithm
 
-**Availability Prioritization**: Members with more unavailable dates are scored higher, ensuring they get assigned to events they can attend before slots fill up.
+**Greedy construction followed by local search:**
 
-**Quality Scoring**: Combines availability, fairness (assignment balance), spread (time spacing), and preference violations with weighted penalties matching the scoring engine weights.
+1. **Greedy** — score eligible members per slot (availability, fairness, spread, day prefs), assign the best with a seeded tie-break, apply via a reversible move layer.
+2. **Local search** — hill-climb by applying the best *improving* move (member↔member swap or empty-slot fill), each validated against hard constraints and applied reversibly, until no improving move remains.
 
-**Hard Constraints**: Role qualification, availability, frequency limits
-**Soft Preferences**: Availability (prioritize constrained members), fairness, assignment spread, consecutive weekends, day balance, role diversity
+A fixed seed keeps generation deterministic. Every decision is captured by a verbose logger and surfaced as an "Algorithm log" in the result dialog.
 
-See `src/utils/rosterGenerator/README.md` for scoring weights and details.
-
-### State Management
-
-**`useRosterData` hook** centralizes all data operations:
-- YAML parsing and validation
-- Automatic persistence (URL state + localStorage)
-- History management (undo/redo)
-- Event updates and generation triggers
-
-**Persistence strategy**:
-- URL state for shareability (compressed with lz-string)
-- localStorage for recovery across sessions
-- History stack for undo functionality
+See [`src/utils/rosterGenerator/README.md`](src/utils/rosterGenerator/README.md) for scoring weights and details.
 
 ## Developer Notes
 
-### Schema-First Design
+### Schema-first design
 
-**`src/schema/rosterSchema.js` is the single source of truth** for all YAML field names and configuration constants.
+**`src/schema/rosterSchema.js` is the single source of truth** for YAML field names and configuration keys.
 
 #### YAML_FIELDS
 
-Maps YAML top-level keys to their actual field names in the YAML file:
+Maps YAML top-level keys to object access — always use it for top-level data:
 
 ```javascript
-export const YAML_FIELDS = {
-  MEMBERS: 'members',
-  EVENTS: 'events',  
-  ROLES: 'roles',
-  ROSTER_PERIOD: 'roster',              // YAML uses 'roster:', not 'roster_period:'
-  ROSTER_CONSTRAINTS: 'roster_constraints',
-  ROSTER_PREFERENCES: 'roster_preferences',
-  MEMBER_PREFERENCES: 'member_preferences',
-  MEMBER_CONSTRAINTS: 'member_constraints',
-}
-```
+import { YAML_FIELDS } from './schema/rosterSchema'
 
-**Usage**: Always use `YAML_FIELDS` when accessing top-level YAML data:
-
-```javascript
-import { YAML_FIELDS, CONSTRAINT_KEYS } from './schema/rosterSchema'
-
-// ✅ DO:
 const members = data[YAML_FIELDS.MEMBERS]
-const period = data[YAML_FIELDS.ROSTER_PERIOD]  // Correctly maps to data.roster
-
-// ❌ DON'T:
-const members = data['members']           // Hardcoded string
-const period = data.roster               // Direct property access
+const period  = data[YAML_FIELDS.ROSTER_PERIOD]  // maps to data.roster (not 'roster_period')
 ```
 
-**Why**: This enables:
-- Single source of truth - change YAML structure in one place
-- Safe refactoring - find all usages with IDE search
-- Consistency - no typos or string mismatches
+Standard property access (`member.name`, `event.date`) is fine for nested fields.
 
-#### Constraint & Preference Keys
-
-Define available constraints and preferences with metadata:
+#### Constraint & preference keys
 
 ```javascript
-import { CONSTRAINT_KEYS, PREFERENCE_KEYS, isConstraintEnabled } from './schema/rosterSchema'
+import { CONSTRAINT_KEYS, isConstraintEnabled } from './schema/rosterSchema'
 
-// Check if constraint is enabled
 if (isConstraintEnabled(rosterConstraints, CONSTRAINT_KEYS.ENFORCE_MEMBER_ROLES)) {
-  // Filter members by role
+  // filter members by role
 }
 ```
 
-**Note**: Standard object property access (e.g., `member.name`, `event.date`) is fine for nested fields. YAML_FIELDS is only for top-level YAML structure.
+Value coercion is a small plain-JS map (`constraintCoercers`) in the same file — no schema library dependency.
 
-### YAML Structure Reference
+### Validation
 
-The actual YAML format expected (see `public/sample.yaml`):
+`src/validators.js` provides a `ValidationBuilder` and a set of validator functions (structure, members, roles, dates, roster period, member constraints) returning `{ errors, warnings }`. Run them all with `runAllValidators(data)`.
+
+### YAML structure reference
+
+The expected format (see [`public/sample.yaml`](public/sample.yaml)):
 
 ```yaml
-roster:                      # Date range (start_date, end_date) - NOT 'roster_period'
+roster:                      # Date range — NOT 'roster_period'
   start_date: "2026-02-01"
-  end_date: "2026-02-28"
+  end_date: "2026-03-31"
 
-roles:                       # Array of role definitions
+roles:                       # Roles defined per roster (data, not defaults)
   - name: "lead"
 
-members:                     # Array of team members
+members:                     # Team members
   - id: "member-1"
     name: "Alice"
     roles: ["lead", "support"]
-    active: true
+    include: true            # include in automatic generation
     telegram: "@alice"
 
-events:                      # Array of events with roster slots
+events:                      # Events with roster slots
   - date: "2026-02-07"
     day_of_week: "Saturday"
     roster:
       - role: "lead"
-        member_id:           # null = unassigned, will be filled
+        member_id:           # empty = unassigned, will be filled
       - role: "support"
-        member_id: "member-1"  # Pre-assigned, won't change
-
-roster_constraints:          # Hard rules (must satisfy)
-  ENFORCE_MEMBER_ROLES: true
-  ONLY_ONCE_PER_WEEK: true
-
-roster_preferences:          # Soft goals (optimize for)
-  SPREAD_ASSIGNMENTS: true
-  AVOID_CONSECUTIVE_WEEKENDS: true
+        member_id: "member-1"  # pre-assigned, won't change
 
 member_constraints:          # Member unavailability
   - member_id: "member-1"
     unavailable_dates: ["2026-02-15"]
 
-member_preferences:          # Member day preferences  
+member_preferences:          # Member day/role preferences
   - member_id: "member-1"
     days: ["Sunday"]
-    max_assignments: 2
 ```
 
-**Key Mapping**: `YAML_FIELDS.ROSTER_PERIOD` → YAML's `roster:` field (not `roster_period:`)
+`roster_constraints` and `roster_preferences` are **optional** — sensible defaults come from `src/config/rosterDefaults.js`. Include them only to override a default, e.g.:
 
+```yaml
+roster_constraints:
+  MAX_ASSIGNMENTS_PER_MONTH: 3
+roster_preferences:
+  AVOID_CONSECUTIVE_WEEKS: false
+```
 
 ## Developer Workflow
 
-### Adding a Constraint/Preference
+### Adding a constraint/preference
 
-1. **Schema**: Add to `CONSTRAINT_KEYS`/`PREFERENCE_KEYS` with metadata
-2. **Logic**: Implement in `eligibilityChecker.js` or `scoringEngine.js`
-3. **Validation**: Add check in `assignmentValidator.js`
-4. **Tests**: Write tests using schema constants
-5. **Documentation**: Update README and sample.yaml.
+1. **Schema**: add to `CONSTRAINT_KEYS` / `PREFERENCE_KEYS` with metadata in `rosterSchema.js`.
+2. **Default**: set its default in `src/config/rosterDefaults.js`.
+3. **Logic**: implement in `eligibilityChecker.js` (hard) or `scoringEngine.js` (soft).
+4. **Validation**: add a check in `assignmentValidator.js` if needed.
+5. **Tests**: write tests using the schema constants.
+6. **Docs**: update this README and `public/sample.yaml`.
 
 ### Testing
 
-- Test files covering validators, generation, constraints, stats
-- Always use schema constants in test data
-- Run specific: `npm test <filename>`
-- Coverage: `npm run test:coverage`
+- Test files cover validators, generation, constraints, derived state, and stats.
+- Always use schema constants in test data.
+- Run a specific file: `npm test <filename>`.
+- Coverage: `npm run test:coverage`.

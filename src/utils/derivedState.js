@@ -5,6 +5,7 @@
 import { YAML_FIELDS } from '../schema/rosterSchema'
 import { createRoleColorMap } from './colorUtils'
 import { DEFAULT_ROSTER_CONSTRAINTS, DEFAULT_ROSTER_PREFERENCES } from '../config/rosterDefaults'
+import { normalizeMemberRoles } from './understudy'
 
 export function getDerivedState(data) {
   if (!data) {
@@ -22,9 +23,18 @@ export function getDerivedState(data) {
     }
   }
 
-  const members = data[YAML_FIELDS.MEMBERS] || []
+  const rawMembers = data[YAML_FIELDS.MEMBERS] || []
   const events = data[YAML_FIELDS.EVENTS] || []
-  
+
+  // Normalize each member's roles: understudy-flagged roles are pulled out of
+  // `roles` (they can't fully perform them yet) into `understudyFor`. Keeps
+  // `member.roles` a plain string array for all downstream `.includes` checks.
+  const members = rawMembers.map(m => {
+    if (!m) return m
+    const { roles, understudyFor } = normalizeMemberRoles(m.roles)
+    return { ...m, roles, understudyFor }
+  })
+
   // Handle both formats: roles: [{name: "x"}, ...] or declared_roles: ["x", ...]
   let roles = []
   if (data[YAML_FIELDS.ROLES] && Array.isArray(data[YAML_FIELDS.ROLES])) {

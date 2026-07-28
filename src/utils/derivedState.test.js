@@ -297,7 +297,9 @@ describe('derivedState', () => {
       
       // Should not mutate original
       expect(originalData.members).toHaveLength(1)
-      expect(state.members).toBe(originalData.members)
+      expect(originalData.members[0]).toEqual({ id: 'alice', name: 'Alice' })
+      // Members are normalized (roles/understudyFor derived) into a new array
+      expect(state.members[0]).toMatchObject({ id: 'alice', name: 'Alice' })
     })
 
     it('should handle legacy include field vs active field', () => {
