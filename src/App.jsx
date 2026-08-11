@@ -14,6 +14,7 @@ import EventsView from './components/EventsView'
 import RosterStatsPanel from './components/RosterStatsPanel'
 import AlgorithmDescriptionModal from './components/AlgorithmDescriptionModal'
 import GenerationResultModal from './components/GenerationResultModal'
+import ChangeReviewPanel from './components/ChangeReviewPanel'
 import YamlDrawer from './components/YamlDrawer'
 import AdminModal from './components/AdminModal'
 
@@ -28,6 +29,7 @@ function App({ auth }) {
   const [generationResult, setGenerationResult] = useState(null)
   const [swapNotice, setSwapNotice] = useState(null)
   const [pendingSwap, setPendingSwap] = useState(null) // { nextEvents, logEntry, message } awaiting confirmation
+  const [showChanges, setShowChanges] = useState(false) // expand the uncommitted-changes review list
   const [pendingRemoveSlot, setPendingRemoveSlot] = useState(null) // { nextEvents, prompt, message } awaiting confirmation
   const [pendingClearGenerated, setPendingClearGenerated] = useState(null) // { nextEvents, count, prompt, message } awaiting confirmation
 
@@ -81,6 +83,8 @@ function App({ auth }) {
   // Committed (last-saved) events, for diffing against the draft.
   const committedEvents = getDerivedState(data).events
   const rosterDiff = computeRosterDiff(committedEvents, events)
+  // Name-only label for the change-review list (diff stores member_id).
+  const getMemberName = (memberId) => memberId ? (members.find(m => m.id === memberId)?.name || memberId) : null
 
   const roleColorMap = createRoleColorMap(roles)
   const rosterStats = calculateRosterStats(events, members, rosterPeriod)
@@ -191,12 +195,15 @@ function App({ auth }) {
   // Save the uncommitted draft (the "binding" update) / discard it.
   const handleCommitDraft = async () => {
     const result = await commitDraft()
-    if (!result.ok) {
+    if (result.ok) {
+      setShowChanges(false)
+    } else {
       setError({ type: 'save', message: result.errors.join('; ') })
     }
   }
   const handleDiscardDraft = () => {
     discardDraft()
+    setShowChanges(false)
     setGenerationResult(null)
   }
 
@@ -536,9 +543,16 @@ function App({ auth }) {
         <div className="sticky top-0 z-40 border-b border-amber-300 bg-amber-50/95 backdrop-blur-md">
           <div className="max-w-full px-3 sm:px-6 lg:px-8 py-2 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
             <div className="flex-1 min-w-0 text-sm text-amber-900">
-              <span className="font-semibold">
+              <button
+                type="button"
+                onClick={() => setShowChanges(v => !v)}
+                className="inline-flex items-center gap-1 font-semibold hover:text-amber-700"
+                aria-expanded={showChanges}
+                title={showChanges ? 'Hide changes' : 'Review changes'}
+              >
+                <span className={`inline-block transition-transform ${showChanges ? 'rotate-90' : ''}`}>▸</span>
                 {rosterDiff.slotChanges.length} unsaved change{rosterDiff.slotChanges.length === 1 ? '' : 's'}
-              </span>
+              </button>
               {(rosterDiff.affectedMemberIds.added.length > 0 || rosterDiff.affectedMemberIds.removed.length > 0) && (
                 <span className="ml-2 text-amber-800">
                   {rosterDiff.affectedMemberIds.added.length > 0 && (
@@ -570,6 +584,9 @@ function App({ auth }) {
               </button>
             </div>
           </div>
+          {showChanges && (
+            <ChangeReviewPanel slotChanges={rosterDiff.slotChanges} getMemberName={getMemberName} />
+          )}
         </div>
       )}
 
