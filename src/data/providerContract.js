@@ -38,8 +38,11 @@
  * @property {{type: string, message: string}|null} error
  * @property {boolean} loading
  * @property {boolean} hasGenerated
- * @property {any[]} history
+ * @property {(any[]|null)} draftEvents    Uncommitted working events, or null when clean.
+ * @property {any[]} effectiveEvents       What the UI should render: draftEvents ?? data.events.
+ * @property {boolean} hasUncommitted      Whether an uncommitted draft exists.
  * @property {boolean} canUndo
+ * @property {boolean} canRedo
  * @property {any[]} actionLog
  * @property {RosterPermissions} permissions
  *
@@ -62,8 +65,10 @@
  * @property {(events: any[]) => Promise<MutationResult>} updateEvents
  * @property {(parsedData: any) => Promise<MutationResult>} replaceData
  * @property {(entryOrEntries: any) => void} logAction
- * @property {(events: any[]) => Promise<void>} saveToHistory
- * @property {() => Promise<boolean>} undoToHistory
+ * @property {() => boolean} undo             Undo one edit within the draft.
+ * @property {() => boolean} redo             Redo one undone edit.
+ * @property {() => Promise<MutationResult>} commitDraft   Persist the draft (the "binding").
+ * @property {() => void} discardDraft        Drop the uncommitted draft.
  * @property {(error: any) => void} setError
  */
 

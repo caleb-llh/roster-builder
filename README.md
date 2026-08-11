@@ -88,8 +88,9 @@ useLocalRosterProvider   useSupabaseRosterProvider
    │                    │
    └────────┬───────────┘
             ▼
-   providerContract  ← uniform shape: { data, permissions, role, rosters,
-            │            importData, updateEvents, replaceData, undo, admin RPCs… }
+   providerContract  ← uniform shape: { data, effectiveEvents, hasUncommitted,
+            │            permissions, role, rosters, importData, updateEvents,
+            │            replaceData, undo, redo, commitDraft, discardDraft, admin RPCs… }
             ▼
       useRosterData()  ← the hook every component uses
             ▼
@@ -157,8 +158,17 @@ This section is the **binding specification** for non-obvious behavior. It recor
 
 [`public/sample.yaml`](public/sample.yaml) is the **single source of truth for what a valid input document looks like**. It must always parse (`js-yaml`) and pass `runAllValidators` with zero errors, and it should exercise every supported field so that reading it teaches the full schema — including the object form of member `roles` (`- name: <role>`) and the `understudy: true` flag. When the schema changes, update `sample.yaml` in the same change (it is part of the [feedback loop](#developer-workflow)); a stale sample is a spec regression. Member `roles` accept both the object form and a bare string for backward compatibility (`normalizeMemberRoles` handles both), but the sample and new documents use the object form for consistency and to make the understudy flag expressible.
 
-### Generated vs. locked (pre-assigned) slots
+### Draft/commit is separate from undo/redo history
 
+Assignment edits (manual slot edits, swaps, generation, YAML-editor roster changes) do **not** touch the persisted "binding" immediately. They accumulate in an uncommitted **draft** that overlays the committed events; the UI renders `effectiveEvents = draftEvents ?? data.events`. Only **Save** (`commitDraft`) writes the draft into the working document — in production it also writes through to Supabase. **Discard** drops the draft. This gives one explicit, reviewable "publish" step and keeps a half-finished roster from becoming the shared source of truth.
+
+The mechanism lives in [`useDraftHistory.js`](src/data/useDraftHistory.js) as **pure transitions** (`applyEdit`/`undoState`/`redoState`/`clearDraft`) wrapped by a hook; both providers use it, so the two modes behave identically and the logic is unit-testable without a renderer. Non-event document fields (members, roles, constraints) still apply immediately — the draft only tracks events.
+
+**Undo/redo are a distinct concern from commit.** They navigate a two-stack history (`undoStack`/`redoStack`) of event snapshots and never persist. Crucially, **commit and discard leave both history stacks intact** — saving is not "the end of history", so you can still undo past a save (the pre-edit snapshot is compared against the new committed state). Conflating the two (e.g. clearing history on save) was deliberately rejected: users expect Ctrl+Z to keep working after they save. Every edit funnels through `updateEvents`, which is the single place that records an undo snapshot; individual handlers must not snapshot separately (that was the old `saveToHistory` pattern, now removed). Shortcuts: Ctrl/Cmd+Z undo, Ctrl/Cmd+Shift+Z (or Ctrl+Y) redo, ignored while typing in a field.
+
+**Uncommitted changes are shown inline, not in a separate panel.** [`computeRosterDiff`](src/utils/rosterDiff.js) compares committed vs. draft positionally (by `date` + `roleIndex`, matching the array data structure) and yields per-slot `added`/`removed`/`changed` markers plus the net set of members added-to / removed-from the roster. Each changed slot shows a small colored dot in its corner (no heavy border) whose hover tooltip gives the detail (`role: before → after`); a sticky Save/Discard bar summarises the count and affected members. Membership is computed net (a member moved between slots is *not* reported as removed).
+
+### Generated vs. locked (pre-assigned) slots
 - A slot with `isGenerated: true` was placed by the generator and may be freely moved/replaced.
 - A slot that is **filled and *not* `isGenerated`** is a **manually pre-assigned ("locked") slot**. `RosterState.isLocked(slot)` identifies these.
 - A generated slot may also be **pinned** (`slot._pinnedPromotion`) by the promotion-planning phase; pinned slots are treated as locked for the duration of the run (transient — stripped before results are returned).

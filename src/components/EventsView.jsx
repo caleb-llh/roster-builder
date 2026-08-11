@@ -38,7 +38,7 @@ async function copyText(text) {
   }
 }
 
-export default function EventsView({ events, members, memberConstraints, roleColorMap, searchQuery, validationResults, roles, onEditRosterSlot, onSwapRosterSlots, onAddRosterSlot, onRemoveRosterSlot, onClearGenerated, yamlData }) {
+export default function EventsView({ events, members, memberConstraints, roleColorMap, searchQuery, validationResults, roles, onEditRosterSlot, onSwapRosterSlots, onAddRosterSlot, onRemoveRosterSlot, onClearGenerated, yamlData, rosterDiff }) {
   const [expandedEvent, setExpandedEvent] = useState(null)
   const [menuOpen, setMenuOpen] = useState(false)
   const [addRoleFor, setAddRoleFor] = useState(null) // event.date whose add-role picker is open
@@ -82,6 +82,29 @@ export default function EventsView({ events, members, memberConstraints, roleCol
     const member = members.find(m => m.id === memberId)
     if (!member) return memberId
     return member.telegram ? `${member.name} - ${member.telegram}` : member.name
+  }
+
+  // Short (name-only) label for the uncommitted-change tooltip.
+  const getMemberName = (memberId) => {
+    if (!memberId) return null
+    return members.find(m => m.id === memberId)?.name || memberId
+  }
+
+  // Map each changed slot (date#roleIndex → change record) so a slot can show
+  // its own before→after tooltip on the diff dot.
+  const slotChangeByKey = {}
+  ;(rosterDiff?.slotChanges || []).forEach(c => {
+    slotChangeByKey[`${c.date}#${c.roleIndex}`] = c
+  })
+  const diffChangeFor = (date, roleIndex) => {
+    const c = slotChangeByKey[`${date}#${roleIndex}`]
+    if (!c) return undefined
+    return {
+      status: c.status,
+      role: c.role,
+      beforeLabel: getMemberName(c.before),
+      afterLabel: getMemberName(c.after),
+    }
   }
 
   // Group events by month only
@@ -487,6 +510,7 @@ export default function EventsView({ events, members, memberConstraints, roleCol
                               memberId={assignment.member_id}
                               memberLabel={getMemberDisplay(assignment.member_id)}
                               isGenerated={assignment.isGenerated}
+                              diffChange={rosterDiff ? diffChangeFor(event.date, idx) : undefined}
                               availableMembers={roleAvailability}
                               onSelect={onEditRosterSlot ? (memberId) => onEditRosterSlot(event.date, idx, memberId) : undefined}
                               onRemove={onEditRosterSlot ? () => onEditRosterSlot(event.date, idx, null) : undefined}

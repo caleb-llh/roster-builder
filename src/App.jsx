@@ -1,9 +1,10 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { createRoleColorMap, formatDateRange } from './utils/colorUtils'
 import { calculateRosterStats } from './utils/rosterStats'
 import { validateEventAssignments } from './utils/assignmentValidator'
 import { generateRoster } from './utils/rosterGenerator'
 import { getDerivedState } from './utils/derivedState'
+import { computeRosterDiff } from './utils/rosterDiff'
 import { useRosterData } from './hooks/useRosterData'
 import { canSwapRosterSlots } from './utils/constraintsUtils'
 import { getActiveConstraints, getActivePreferences, getConstraintDescription, getPreferenceDescription, MEMBER_PREF_FIELDS } from './schema/rosterSchema'
@@ -37,6 +38,9 @@ function App({ auth }) {
     error, 
     loading, 
     canUndo,
+    canRedo,
+    hasUncommitted,
+    effectiveEvents,
     actionLog,
     permissions,
     role,
@@ -48,10 +52,18 @@ function App({ auth }) {
     updateEvents,
     replaceData,
     logAction,
-    saveToHistory,
-    undoToHistory,
+    undo,
+    redo,
+    commitDraft,
+    discardDraft,
     setError 
   } = roster
+
+  // The document the UI renders from: committed data with the uncommitted draft
+  // events overlaid (effectiveEvents === draftEvents ?? data.events). All
+  // derived state and validation run against this, so pending edits are visible
+  // everywhere before they are saved.
+  const effectiveData = data ? { ...data, events: effectiveEvents } : data
 
   // Derived state using utility function
   const {
@@ -64,7 +76,11 @@ function App({ auth }) {
     rosterConstraints,
     rosterPreferences,
     rosterPeriod
-  } = getDerivedState(data)
+  } = getDerivedState(effectiveData)
+
+  // Committed (last-saved) events, for diffing against the draft.
+  const committedEvents = getDerivedState(data).events
+  const rosterDiff = computeRosterDiff(committedEvents, events)
 
   const roleColorMap = createRoleColorMap(roles)
   const rosterStats = calculateRosterStats(events, members, rosterPeriod)
@@ -144,9 +160,6 @@ function App({ auth }) {
   const handleConfirmGeneration = () => {
     setShowAlgorithmModal(false)
     try {
-      // Save current state to history
-      saveToHistory(events)
-      
       const result = generateRoster(
         events,
         members,
@@ -166,12 +179,51 @@ function App({ auth }) {
     }
   }
 
-  // Handle undo
-  const handleUndo = async () => {
-    if (await undoToHistory()) {
-      setGenerationResult(null)
+  // Undo / redo. These navigate the draft history and NEVER touch committed
+  // state (committing is a separate concern — see the draft/commit spec).
+  const handleUndo = () => {
+    if (undo()) setGenerationResult(null)
+  }
+  const handleRedo = () => {
+    if (redo()) setGenerationResult(null)
+  }
+
+  // Save the uncommitted draft (the "binding" update) / discard it.
+  const handleCommitDraft = async () => {
+    const result = await commitDraft()
+    if (!result.ok) {
+      setError({ type: 'save', message: result.errors.join('; ') })
     }
   }
+  const handleDiscardDraft = () => {
+    discardDraft()
+    setGenerationResult(null)
+  }
+
+  // Keyboard shortcuts: Ctrl/Cmd+Z undo, Ctrl/Cmd+Shift+Z (or Ctrl+Y) redo.
+  // Ignored while typing in a field so we don't hijack the browser's text undo.
+  useEffect(() => {
+    if (!permissions.canUndo) return
+    const isTextTarget = (el) => {
+      if (!el) return false
+      const tag = el.tagName
+      return tag === 'INPUT' || tag === 'TEXTAREA' || el.isContentEditable || el.closest?.('.cm-editor')
+    }
+    const onKeyDown = (e) => {
+      const mod = e.metaKey || e.ctrlKey
+      if (!mod || isTextTarget(e.target)) return
+      const key = e.key.toLowerCase()
+      if (key === 'z' && !e.shiftKey) {
+        e.preventDefault()
+        handleUndo()
+      } else if ((key === 'z' && e.shiftKey) || key === 'y') {
+        e.preventDefault()
+        handleRedo()
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [permissions.canUndo, undo, redo])
 
   // Handle a manual roster slot edit from the Events view.
   // memberId === null removes the current occupant; otherwise inserts/replaces.
@@ -213,8 +265,7 @@ function App({ auth }) {
       return { ...event, roster: nextRoster }
     })
 
-    // Record a pre-mutation snapshot so this single action can be undone.
-    if (logEntry) saveToHistory(events)
+    // updateEvents records the pre-mutation snapshot for undo automatically.
     updateEvents(nextEvents)
     if (logEntry) logAction(logEntry)
   }
@@ -295,7 +346,6 @@ function App({ auth }) {
   // Apply the staged swap after the user confirms.
   const confirmSwap = () => {
     if (!pendingSwap) return
-    saveToHistory(events) // pre-swap snapshot for single-action undo
     updateEvents(pendingSwap.nextEvents)
     logAction({ level: 'info', category: 'swap', group: 'manual', message: pendingSwap.message })
     setPendingSwap(null)
@@ -315,7 +365,6 @@ function App({ auth }) {
     })
     if (!added) return
     const event = events.find(e => e.date === eventDate)
-    saveToHistory(events)
     updateEvents(nextEvents)
     logAction({
       level: 'info', category: 'insert', group: 'manual',
@@ -327,7 +376,6 @@ function App({ auth }) {
   // entire role requirement is destructive, so it is staged for confirmation.
   const confirmRemoveSlot = () => {
     if (!pendingRemoveSlot) return
-    saveToHistory(events)
     updateEvents(pendingRemoveSlot.nextEvents)
     logAction({ level: 'info', category: 'delete', group: 'manual', message: pendingRemoveSlot.message })
     setPendingRemoveSlot(null)
@@ -380,7 +428,6 @@ function App({ auth }) {
   // Apply the staged clear-generated action after the user confirms.
   const confirmClearGenerated = () => {
     if (!pendingClearGenerated) return
-    saveToHistory(events)
     updateEvents(pendingClearGenerated.nextEvents)
     logAction({
       level: 'info', category: 'delete', group: 'manual',
@@ -401,69 +448,6 @@ function App({ auth }) {
 
   if (loading) return <div className="min-h-screen bg-gray-50 flex items-center justify-center"><div className="text-gray-600">Loading...</div></div>
   if (error) return <ErrorDisplay title={error.type === 'validation' ? 'Validation Errors' : 'Loading Error'} message={error.message} hint={error.type === 'load' ? 'Check YAML file syntax. Telegram handles need quotes.' : undefined} />
-
-  // Show welcome screen if no data
-  if (!data) {
-    return (
-      <>
-        <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 flex items-center justify-center p-4 pt-safe pb-safe">
-          <div className="max-w-2xl w-full">
-            <div className="text-center mb-8">
-              <h1 className="text-3xl sm:text-5xl font-bold text-gray-900 mb-4">📋 Roster Builder</h1>
-              <p className="text-base sm:text-xl text-gray-600">
-                Intelligent roster generation and management
-              </p>
-            </div>
-            
-            <div className="bg-white/80 backdrop-blur-md rounded-2xl shadow-2xl p-6 sm:p-8 border border-white/50">
-              <h2 className="text-xl sm:text-2xl font-bold text-gray-900 mb-6 text-center">Get Started</h2>
-              
-              <div className="space-y-4">
-                {permissions.canImport && (
-                  <>
-                    <button
-                      onClick={() => setShowDrawer(true)}
-                      className="w-full px-6 sm:px-8 py-5 sm:py-6 bg-gradient-to-r from-blue-500 to-blue-600 text-white font-bold text-base sm:text-lg rounded-xl shadow-lg hover:shadow-xl hover:from-blue-600 hover:to-blue-700 active:scale-[0.98] transition-all flex items-center justify-center gap-3 touch-manipulation"
-                    >
-                      <span className="text-2xl">📥</span>
-                      <span>Import Roster Data</span>
-                    </button>
-
-                    <div className="text-center text-sm text-gray-500">
-                      Paste YAML or upload a file to begin
-                    </div>
-                  </>
-                )}
-
-                {auth?.mode === 'production' && auth.user && (
-                  <button
-                    onClick={() => setShowAdmin(true)}
-                    className="w-full rounded-xl border border-gray-300 px-6 py-3 text-sm font-medium text-gray-700 hover:bg-gray-50 touch-manipulation"
-                  >
-                    ⚙ Create or manage a roster
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* YAML Drawer (import) — owner-only in production */}
-        {permissions.canImport && (
-          <YamlDrawer
-            open={showDrawer}
-            onClose={() => setShowDrawer(false)}
-            data={null}
-            onReplace={replaceData}
-            onImport={handleImport}
-          />
-        )}
-
-        {/* Owner admin panel (production) */}
-        <AdminModal open={showAdmin} onClose={() => setShowAdmin(false)} roster={roster} />
-      </>
-    )
-  }
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -545,6 +529,50 @@ function App({ auth }) {
         </div>
       </header>
 
+      {/* Uncommitted-changes bar: draft edits are visible in the roster but not
+          yet saved to the binding. Shows what changed + who is affected, with
+          Save / Discard. Undo/redo are independent of this (see spec). */}
+      {hasUncommitted && permissions.canEditRoster && (
+        <div className="sticky top-0 z-40 border-b border-amber-300 bg-amber-50/95 backdrop-blur-md">
+          <div className="max-w-full px-3 sm:px-6 lg:px-8 py-2 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
+            <div className="flex-1 min-w-0 text-sm text-amber-900">
+              <span className="font-semibold">
+                {rosterDiff.slotChanges.length} unsaved change{rosterDiff.slotChanges.length === 1 ? '' : 's'}
+              </span>
+              {(rosterDiff.affectedMemberIds.added.length > 0 || rosterDiff.affectedMemberIds.removed.length > 0) && (
+                <span className="ml-2 text-amber-800">
+                  {rosterDiff.affectedMemberIds.added.length > 0 && (
+                    <span title="Newly on the roster">
+                      +{rosterDiff.affectedMemberIds.added.map(id => members.find(m => m.id === id)?.name || id).join(', ')}
+                    </span>
+                  )}
+                  {rosterDiff.affectedMemberIds.added.length > 0 && rosterDiff.affectedMemberIds.removed.length > 0 && ' · '}
+                  {rosterDiff.affectedMemberIds.removed.length > 0 && (
+                    <span title="No longer on the roster">
+                      −{rosterDiff.affectedMemberIds.removed.map(id => members.find(m => m.id === id)?.name || id).join(', ')}
+                    </span>
+                  )}
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                onClick={handleDiscardDraft}
+                className="rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-sm font-medium text-amber-800 hover:bg-amber-100 active:scale-95 transition-all touch-manipulation"
+              >
+                Discard
+              </button>
+              <button
+                onClick={handleCommitDraft}
+                className="rounded-lg bg-amber-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-amber-700 active:scale-95 transition-all touch-manipulation"
+              >
+                Save changes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Mobile tab switcher (hidden on lg where both panels show side-by-side) */}
       <div className="lg:hidden sticky top-0 z-30 flex bg-white/70 backdrop-blur-md border-b border-gray-200">
         <button
@@ -592,6 +620,7 @@ function App({ auth }) {
             onRemoveRosterSlot={permissions.canEditRoster ? handleRemoveRosterSlot : undefined}
             onClearGenerated={permissions.canEditRoster ? handleClearGenerated : undefined}
             yamlData={data}
+            rosterDiff={hasUncommitted ? rosterDiff : null}
           />
         </div>
       </div>
@@ -617,9 +646,18 @@ function App({ auth }) {
             <button
               onClick={handleUndo}
               className="flex h-12 w-12 items-center justify-center rounded-full bg-white/80 backdrop-blur-md border border-gray-300/50 text-lg text-gray-700 shadow-lg hover:bg-white active:scale-95 transition-all touch-manipulation"
-              title="Undo last action"
+              title="Undo (Ctrl/Cmd+Z)"
             >
               ↶
+            </button>
+          )}
+          {canRedo && permissions.canUndo && (
+            <button
+              onClick={handleRedo}
+              className="flex h-12 w-12 items-center justify-center rounded-full bg-white/80 backdrop-blur-md border border-gray-300/50 text-lg text-gray-700 shadow-lg hover:bg-white active:scale-95 transition-all touch-manipulation"
+              title="Redo (Ctrl/Cmd+Shift+Z)"
+            >
+              ↷
             </button>
           )}
           {permissions.canImport && (

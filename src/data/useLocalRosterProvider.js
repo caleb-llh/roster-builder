@@ -2,6 +2,7 @@ import { useState } from 'react'
 import yaml from 'js-yaml'
 import { runAllValidators } from '../validators'
 import { LOCAL_PERMISSIONS } from './providerContract'
+import { useDraftHistory } from './useDraftHistory'
 
 /**
  * Local (in-memory) implementation of the roster data provider contract.
@@ -20,8 +21,16 @@ export function useLocalRosterProvider() {
   const [error, setError] = useState(null)
   const [loading] = useState(false)
   const [hasGenerated, setHasGenerated] = useState(false)
-  const [history, setHistory] = useState([])
   const [actionLog, setActionLog] = useState([]) // Generic roster action log
+
+  // Draft overlay + undo/redo. Committed events live in `data.events`; edits
+  // build an uncommitted draft that is only merged back on commit().
+  const persistCommittedEvents = async (events) => {
+    setData(prevData => ({ ...prevData, events }))
+    setHasGenerated(true)
+    return { ok: true, errors: [] }
+  }
+  const draft = useDraftHistory(data?.events, persistCommittedEvents)
 
   // Import YAML data (fresh session).
   const importData = async (yamlText) => {
@@ -45,7 +54,7 @@ export function useLocalRosterProvider() {
     )
     setError(null)
     setHasGenerated(false)
-    setHistory([])
+    draft.resetDraftHistory()
     setActionLog([])
 
     return { ok: true, errors: [] }
@@ -56,15 +65,15 @@ export function useLocalRosterProvider() {
     setData(null)
     setOriginalData(null)
     setHasGenerated(false)
-    setHistory([])
+    draft.resetDraftHistory()
     setActionLog([])
     setError(null)
   }
 
-  // Update events after generation / manual edit.
+  // Update events after generation / manual edit. Goes into the uncommitted
+  // draft (undoable); committed state changes only on commit().
   const updateEvents = async (newEvents) => {
-    setData(prevData => ({ ...prevData, events: newEvents }))
-    setHasGenerated(true)
+    draft.applyDraftEdit(newEvents)
     return { ok: true, errors: [] }
   }
 
@@ -72,8 +81,11 @@ export function useLocalRosterProvider() {
    * Replace the entire working document from an edited object (e.g. the live
    * YAML editor). Validates first; on failure the current state is kept
    * unchanged and the errors are returned so the caller can surface them.
-   * This is a live edit of the working document, so history / generated flags
-   * are preserved (unlike importData, which starts a fresh session).
+   *
+   * Non-event fields (members, roles, constraints) apply to the working
+   * document immediately. The events portion is routed through the draft so
+   * YAML-editor roster changes are undoable and part of the same commit flow as
+   * manual edits (see README "Draft/commit is separate from undo/redo history").
    */
   const replaceData = async (parsedData) => {
     const validation = runAllValidators(parsedData)
@@ -81,11 +93,13 @@ export function useLocalRosterProvider() {
       return { ok: false, errors: validation.errors }
     }
 
-    setData(
-      validation.hasWarnings
-        ? { ...parsedData, warnings: validation.warnings }
-        : parsedData
-    )
+    const { events: nextEvents, ...docWithoutEvents } = parsedData
+    setData(prev => ({
+      ...docWithoutEvents,
+      events: (draft.draftEvents !== null ? draft.draftEvents : prev?.events) || [],
+      ...(validation.hasWarnings ? { warnings: validation.warnings } : {}),
+    }))
+    draft.applyDraftEdit(nextEvents || [])
     return { ok: true, errors: [] }
   }
 
@@ -99,21 +113,6 @@ export function useLocalRosterProvider() {
     setActionLog(prev => [...prev, ...additions])
   }
 
-  // Add to history.
-  const saveToHistory = async (events) => {
-    setHistory(prev => [...prev, JSON.parse(JSON.stringify(events))])
-  }
-
-  // Undo to previous state.
-  const undoToHistory = async () => {
-    if (history.length === 0) return false
-
-    const previousEvents = history[history.length - 1]
-    setHistory(prev => prev.slice(0, -1))
-    setData(prevData => ({ ...prevData, events: previousEvents }))
-    return true
-  }
-
   return {
     // State
     data,
@@ -121,8 +120,12 @@ export function useLocalRosterProvider() {
     error,
     loading,
     hasGenerated,
-    history,
-    canUndo: history.length > 0,
+    // Draft + undo/redo (see useDraftHistory)
+    draftEvents: draft.draftEvents,
+    effectiveEvents: draft.effectiveEvents,
+    hasUncommitted: draft.hasUncommitted,
+    canUndo: draft.canUndo,
+    canRedo: draft.canRedo,
     actionLog,
     permissions: LOCAL_PERMISSIONS,
     // Admin surface — production only. Local mode has no roles or membership,
@@ -146,8 +149,10 @@ export function useLocalRosterProvider() {
     updateEvents,
     replaceData,
     logAction,
-    saveToHistory,
-    undoToHistory,
+    undo: draft.undo,
+    redo: draft.redo,
+    commitDraft: draft.commit,
+    discardDraft: draft.discard,
     setError,
   }
 }

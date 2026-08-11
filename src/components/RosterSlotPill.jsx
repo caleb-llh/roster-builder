@@ -24,6 +24,7 @@ export default function RosterSlotPill({
   memberId,
   memberLabel,
   isGenerated,
+  diffChange,
   availableMembers = [],
   onSelect,
   onRemove,
@@ -117,6 +118,15 @@ export default function RosterSlotPill({
 
   const canDrag = Boolean(onSwap && memberId)
 
+  // Inline uncommitted-change marker (draft vs. last saved): just a small
+  // colored dot in the corner, so pending edits are visible in place without
+  // clutter. Hovering the dot reveals what changed.
+  const diffMeta = diffChange && {
+    changed: { cls: 'bg-amber-500', label: 'Changed' },
+    added: { cls: 'bg-emerald-500', label: 'Added' },
+    removed: { cls: 'bg-rose-500', label: 'Removed' },
+  }[diffChange.status]
+
   return (
     <div
       className="relative inline-flex items-center"
@@ -125,6 +135,33 @@ export default function RosterSlotPill({
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
+      {diffMeta && (
+        <span
+          className="group/diff absolute -left-1 -top-1 z-10"
+          onMouseDown={(e) => e.stopPropagation()}
+        >
+          <span className={`block h-2 w-2 rounded-full ring-2 ring-white ${diffMeta.cls}`} />
+          <span
+            role="tooltip"
+            className="pointer-events-none absolute left-1/2 top-3 z-30 hidden -translate-x-1/2 whitespace-nowrap rounded-md bg-gray-900 px-2 py-1 text-[11px] leading-tight text-white shadow-lg group-hover/diff:block"
+          >
+            <span className="font-semibold">{diffMeta.label} · unsaved</span>
+            <br />
+            <span className="text-gray-300">{diffChange.role}: </span>
+            {diffChange.status === 'added' ? (
+              <span>{diffChange.afterLabel || 'unassigned'}</span>
+            ) : diffChange.status === 'removed' ? (
+              <span className="line-through">{diffChange.beforeLabel || 'unassigned'}</span>
+            ) : (
+              <span>
+                <span className="line-through text-gray-400">{diffChange.beforeLabel || 'unassigned'}</span>
+                {' → '}
+                <span>{diffChange.afterLabel || 'unassigned'}</span>
+              </span>
+            )}
+          </span>
+        </span>
+      )}
       <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 text-xs font-medium rounded ${roleColorClass}`}>
         {role}
         {onRemoveSlot && (
