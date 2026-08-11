@@ -186,5 +186,33 @@ describe('rosterStats', () => {
       
       expect(stats.monthCount).toBe(15) // Feb 2026 to Apr 2027
     })
+
+    it('computes live fairness metrics from the current roster state', () => {
+      const stats = calculateRosterStats(events, members, rosterPeriod)
+
+      // john: 2 assignments, jane: 2 assignments, bob excluded (include:false).
+      expect(stats.fairnessMetrics).toBeDefined()
+      expect(stats.fairnessMetrics.assignmentsByMember.john.total).toBe(2)
+      expect(stats.fairnessMetrics.assignmentsByMember.jane.total).toBe(2)
+      expect(stats.fairnessMetrics.assignmentsByMember.bob).toBeUndefined()
+      // Equal counts => perfectly fair => std dev 0.
+      expect(stats.fairnessMetrics.assignmentStdDev).toBe(0)
+      // assignedRoles counts only active members' filled slots (4, not the
+      // empty cam-1 slot).
+      expect(stats.assignedRoles).toBe(4)
+    })
+
+    it('fairness metrics update when the roster changes (real-time)', () => {
+      const unbalanced = [
+        { date: '2026-02-07', roster: [{ role: 'vm', member_id: 'john' }] },
+        { date: '2026-02-14', roster: [{ role: 'vm', member_id: 'john' }] },
+        { date: '2026-02-21', roster: [{ role: 'vm', member_id: 'john' }] }
+      ]
+      const stats = calculateRosterStats(unbalanced, members, rosterPeriod)
+
+      // john has 3, jane has 0 => non-zero std dev, reflecting current state.
+      expect(stats.fairnessMetrics.assignmentsByMember.john.total).toBe(3)
+      expect(stats.fairnessMetrics.assignmentStdDev).toBeGreaterThan(0)
+    })
   })
 })

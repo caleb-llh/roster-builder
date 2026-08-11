@@ -109,7 +109,7 @@ export function BellCurveChart({ sortedDistribution, maxMemberCount, members = [
             >
               <div 
                 className={`w-full rounded-t transition-all cursor-pointer flex items-start justify-center ${
-                  isHovered ? 'bg-blue-600 ring-2 ring-blue-400' : 'bg-blue-500 hover:bg-blue-600'
+                  isHovered ? 'bg-slate-700 ring-2 ring-slate-400' : 'bg-slate-500 hover:bg-slate-600'
                 }`}
                 style={{ 
                   height: `${heightPixels}px`

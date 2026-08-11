@@ -5,6 +5,8 @@
  * @param {Object} rosterPeriod - Roster period with start_date and end_date
  * @returns {Object} - Statistics including total slots, per-member stats, etc.
  */
+import { AssignmentTracker } from './rosterGenerator/assignmentTracker'
+
 export const calculateRosterStats = (events, members, rosterPeriod) => {
   if (!events || !members || !rosterPeriod) {
     return {
@@ -110,6 +112,24 @@ export const calculateRosterStats = (events, members, rosterPeriod) => {
     ? roleStats.reduce((sum, r) => sum + r.uniqueMembers, 0) / roleStats.length 
     : 0
 
+  // Live fairness metrics computed from the CURRENT roster state (not a
+  // generation snapshot), so statistics update in real time as slots are
+  // edited/swapped. Reuses AssignmentTracker so the formulas stay identical to
+  // the generator's fairness/spread scores.
+  const tracker = new AssignmentTracker(activeMembers, events, rosterPeriod)
+  const assignmentsByMember = {}
+  let assignedRoles = 0
+  activeMembers.forEach(m => {
+    const total = tracker.getAssignmentCount(m.id)
+    assignmentsByMember[m.id] = { total }
+    assignedRoles += total
+  })
+  const fairnessMetrics = {
+    assignmentStdDev: tracker.getFairnessScore(),
+    spreadStdDev: tracker.getSpreadScore(),
+    assignmentsByMember
+  }
+
   return {
     totalSlots,
     totalEvents,
@@ -118,6 +138,8 @@ export const calculateRosterStats = (events, members, rosterPeriod) => {
     avgSlotsPerMonth: Math.round(avgSlotsPerMonth * 10) / 10,
     avgSlotsPerMember: Math.round(avgSlotsPerMember * 10) / 10,
     memberStats,
+    fairnessMetrics,
+    assignedRoles,
     roleDiversity: {
       roleStats: roleStats,
       avgMembersPerRole: Math.round(avgMembersPerRole * 10) / 10,

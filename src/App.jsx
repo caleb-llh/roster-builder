@@ -5,8 +5,7 @@ import { validateEventAssignments } from './utils/assignmentValidator'
 import { generateRoster } from './utils/rosterGenerator'
 import { getDerivedState } from './utils/derivedState'
 import { useRosterData } from './hooks/useRosterData'
-import { isMemberUnavailable } from './utils/constraintsUtils'
-import { canFillSlotRole, isUnderstudyRole, isPromotedForRole } from './utils/understudy'
+import { canSwapRosterSlots } from './utils/constraintsUtils'
 import { getActiveConstraints, getActivePreferences, getConstraintDescription, getPreferenceDescription, MEMBER_PREF_FIELDS } from './schema/rosterSchema'
 import { ErrorDisplay } from './components/SharedComponents'
 import MembersView from './components/MembersView'
@@ -245,33 +244,13 @@ function App({ auth }) {
     const memberB = slotB.member_id || null
     if (!memberA && !memberB) return
 
-    // Can `memberId` occupy the given slot in `event`? Ignores the slot the
-    // member is leaving so a straight swap never fails on itself.
-    const canOccupy = (memberId, event, slot, ignoreRoleIndex) => {
-      if (!memberId) return true // clearing a slot is always valid
-      const member = memberById(memberId)
-      if (!member || member.include === false) return false
-      // Role compatibility. For a real role, a trainee counts only once they've
-      // been promoted (completed an understudy session for it on an earlier
-      // date) — same rule the assignment dropdown uses.
-      const roleOk = canFillSlotRole(member, slot.role) ||
-        (!isUnderstudyRole(slot.role) && isPromotedForRole(member, slot.role, events, event.date))
-      if (!roleOk) return false
-      if (isMemberUnavailable(memberId, event.date, memberConstraints)) return false
-      // No duplicate member within the same event.
-      const clash = event.roster.some((r, i) =>
-        i !== ignoreRoleIndex && r.member_id === memberId
-      )
-      return !clash
-    }
+    const isValid = canSwapRosterSlots({
+      memberA, memberB, eventA, eventB,
+      sourceIndex: source.roleIndex, targetIndex: target.roleIndex,
+      slotA, slotB, members, memberConstraints, allEvents: events,
+    })
 
-    const sameEvent = eventA === eventB
-    // When swapping within one event, both slots share the roster array, so
-    // ignore both indices when checking for duplicates.
-    const aOk = canOccupy(memberA, eventB, slotB, sameEvent ? source.roleIndex : target.roleIndex)
-    const bOk = canOccupy(memberB, eventA, slotA, source.roleIndex)
-
-    if (!aOk || !bOk) {
+    if (!isValid) {
       setSwapNotice(
         `Invalid swap: ${nameOf(memberA)} ↔ ${nameOf(memberB)} would break role, availability, or once-per-event rules.`
       )

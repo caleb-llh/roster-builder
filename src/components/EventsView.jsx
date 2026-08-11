@@ -40,7 +40,6 @@ async function copyText(text) {
 
 export default function EventsView({ events, members, memberConstraints, roleColorMap, searchQuery, validationResults, roles, onEditRosterSlot, onSwapRosterSlots, onAddRosterSlot, onRemoveRosterSlot, onClearGenerated, yamlData }) {
   const [expandedEvent, setExpandedEvent] = useState(null)
-  const [viewMode, setViewMode] = useState('cards') // 'cards' or 'table'
   const [menuOpen, setMenuOpen] = useState(false)
   const [addRoleFor, setAddRoleFor] = useState(null) // event.date whose add-role picker is open
   const [overlayEventKey, setOverlayEventKey] = useState(null) // card with an open slot picker/confirm (lifts its z-index)
@@ -132,7 +131,6 @@ export default function EventsView({ events, members, memberConstraints, roleCol
   // down the viewport. This avoids the stale-highlight lag that happened when
   // relying on which entry happened to fire.
   useEffect(() => {
-    if (viewMode !== 'cards') return
     const sections = filteredMonths
       .map(m => monthRefs.current[m.key])
       .filter(Boolean)
@@ -175,7 +173,7 @@ export default function EventsView({ events, members, memberConstraints, roleCol
       window.removeEventListener('scroll', onScroll)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [monthKeysSignature, viewMode])
+  }, [monthKeysSignature])
 
   // Keep the active chip scrolled into view within the selector bar.
   useEffect(() => {
@@ -353,23 +351,8 @@ export default function EventsView({ events, members, memberConstraints, roleCol
 
             {menuOpen && (
               <div className="absolute right-0 top-full z-30 mt-1 w-52 overflow-hidden rounded-lg border border-gray-200 bg-white py-1 shadow-lg">
-                <div className="px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-gray-400">View</div>
-                <button
-                  onClick={() => { setViewMode('cards'); setMenuOpen(false) }}
-                  className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-blue-50 ${viewMode === 'cards' ? 'font-semibold text-blue-600' : 'text-gray-700'}`}
-                >
-                  📇 Cards {viewMode === 'cards' && <span className="ml-auto">✓</span>}
-                </button>
-                <button
-                  onClick={() => { setViewMode('table'); setMenuOpen(false) }}
-                  className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-blue-50 ${viewMode === 'table' ? 'font-semibold text-blue-600' : 'text-gray-700'}`}
-                >
-                  📊 Table {viewMode === 'table' && <span className="ml-auto">✓</span>}
-                </button>
-
                 {onClearGenerated && (
                   <>
-                    <div className="my-1 border-t border-gray-100" />
                     <div className="px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-gray-400">Roster</div>
                     <button
                       onClick={() => { onClearGenerated(); setMenuOpen(false) }}
@@ -379,10 +362,10 @@ export default function EventsView({ events, members, memberConstraints, roleCol
                     >
                       🧹 Remove generated
                     </button>
+                    <div className="my-1 border-t border-gray-100" />
                   </>
                 )}
 
-                <div className="my-1 border-t border-gray-100" />
                 <div className="px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-gray-400">Export</div>
                 <button
                   onClick={() => { copyToClipboard(); setMenuOpen(false) }}
@@ -434,8 +417,7 @@ export default function EventsView({ events, members, memberConstraints, roleCol
       )}
         
       {/* Card View */}
-      {viewMode === 'cards' && (
-        <div className="space-y-8">
+      <div className="space-y-8">
           {filteredMonths.map((month, monthIdx) => (
             <div
               key={monthIdx}
@@ -622,119 +604,6 @@ export default function EventsView({ events, members, memberConstraints, roleCol
           </div>
         ))}
         </div>
-      )}
-
-      {/* Table View */}
-      {viewMode === 'table' && (
-        <div className="space-y-8">
-          {filteredMonths.map((month, monthIdx) => (
-            <div key={monthIdx}>
-              <h3 className="text-xl font-bold text-gray-900 mb-4 pb-2 border-b-2 border-gray-400">
-                {month.monthName}
-              </h3>
-              <div className="bg-white/60 backdrop-blur-md rounded-lg shadow-lg border border-white/30 overflow-hidden">
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead className="bg-gray-100/80">
-                      <tr>
-                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Date</th>
-                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Event</th>
-                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Time</th>
-                        {exportColumns.map(col => (
-                          <th key={col.label} className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                            {col.label}
-                          </th>
-                        ))}
-                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Status</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-200">
-                      {month.events.map((event, eventIdx) => {
-                        const validation = validationResults?.[event.date] || { errors: [], warnings: [] }
-                        const hasErrors = validation.errors.length > 0
-                        const hasWarnings = validation.warnings.length > 0
-                        const eventDate = new Date(event.date)
-                        const dayOfWeek = eventDate.getDay()
-                        const cardBgClass = getCardColorForDay(dayOfWeek)
-                        
-                        // Group slots by role (positional) so duplicate roles
-                        // and understudy columns each get their own cell.
-                        const byRole = {}
-                        if (event.roster) {
-                          event.roster.forEach(assignment => {
-                            if (!assignment.role) return
-                            ;(byRole[assignment.role] ||= []).push(assignment)
-                          })
-                        }
-                        
-                        return (
-                          <tr 
-                            key={eventIdx} 
-                            className={`${cardBgClass} hover:bg-white/40 transition-colors ${
-                              hasErrors ? 'border-l-4 border-red-500' : hasWarnings ? 'border-l-4 border-yellow-500' : ''
-                            }`}
-                          >
-                            <td className="px-4 py-3">
-                              <div className="flex flex-col">
-                                <span className="font-bold text-gray-900">{formatDate(event.date)}</span>
-                                <span className="text-xs text-blue-800 bg-blue-100/60 px-2 py-0.5 rounded inline-block w-fit mt-1">
-                                  {event.day_of_week}
-                                </span>
-                              </div>
-                            </td>
-                            <td className="px-4 py-3">
-                              <span className="text-sm font-medium text-gray-900">{event.name}</span>
-                            </td>
-                            <td className="px-4 py-3">
-                              <span className="text-sm text-gray-700">{event.reporting_time}</span>
-                            </td>
-                            {exportColumns.map(col => {
-                              const slot = byRole[col.role]?.[col.index]
-                              return (
-                                <td key={col.label} className="px-4 py-3">
-                                  {slot && slot.member_id ? (
-                                    <div className="flex items-center gap-1.5">
-                                      <span className="text-sm text-gray-900 font-medium">{getMemberDisplay(slot.member_id)}</span>
-                                      {slot.isGenerated && (
-                                        <span className="px-1.5 py-0.5 text-[10px] font-medium bg-gray-100 text-gray-500 rounded" title="Auto-generated by algorithm">
-                                          generated
-                                        </span>
-                                      )}
-                                    </div>
-                                  ) : (
-                                    <span className="text-xs text-gray-400 italic">-</span>
-                                  )}
-                                </td>
-                              )
-                            })}
-                            <td className="px-4 py-3">
-                              <div className="flex flex-col gap-1">
-                                {hasErrors && (
-                                  <span className="px-2 py-1 bg-red-100 text-red-800 text-xs font-semibold rounded border border-red-300 inline-block w-fit">
-                                    ❌ {validation.errors.length} Error{validation.errors.length > 1 ? 's' : ''}
-                                  </span>
-                                )}
-                                {hasWarnings && (
-                                  <span className="px-2 py-1 bg-yellow-100 text-yellow-800 text-xs font-semibold rounded border border-yellow-300 inline-block w-fit">
-                                    ⚠️ {validation.warnings.length} Warning{validation.warnings.length > 1 ? 's' : ''}
-                                  </span>
-                                )}
-                                {!hasErrors && !hasWarnings && (
-                                  <span className="text-xs text-green-700 font-medium">✓ OK</span>
-                                )}
-                              </div>
-                            </td>
-                          </tr>
-                        )
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
 
       {filteredMonths.length === 0 && (
         <div className="text-center py-12 text-gray-500">
@@ -742,8 +611,8 @@ export default function EventsView({ events, members, memberConstraints, roleCol
         </div>
       )}
 
-      {/* Floating month selector (cards view, 2+ months) */}
-      {viewMode === 'cards' && filteredMonths.length > 1 && (
+      {/* Floating month selector (2+ months) */}
+      {filteredMonths.length > 1 && (
         <div className="pointer-events-none fixed inset-x-0 z-30 flex justify-center px-4 bottom-safe">
           <div
             ref={selectorRef}

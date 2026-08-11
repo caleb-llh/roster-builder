@@ -35,7 +35,7 @@ export default function RosterStatsPanel({ stats, generationResult, members, act
         <h3 className="text-lg font-semibold text-gray-900">Roster Statistics</h3>
         <button
           onClick={() => setShowDetails(!showDetails)}
-          className="text-xs text-blue-600 hover:text-blue-800 font-medium"
+          className="text-xs text-slate-600 hover:text-slate-900 font-medium"
         >
           {showDetails ? '▼ Hide Details' : '▶ Show Details'}
         </button>
@@ -43,7 +43,7 @@ export default function RosterStatsPanel({ stats, generationResult, members, act
 
       {/* Summary Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
-        <div className="bg-blue-50/60 rounded-lg p-3 border border-blue-200/40">
+        <div className="bg-slate-50 rounded-lg p-3 border border-slate-200">
           <div className="text-xs text-gray-600 mb-1">Total Shifts Required</div>
           <div className="text-2xl font-bold text-gray-900">{totalSlots}</div>
           <div className="text-xs text-gray-500 mt-1">
@@ -51,7 +51,7 @@ export default function RosterStatsPanel({ stats, generationResult, members, act
           </div>
         </div>
 
-        <div className="bg-green-50/60 rounded-lg p-3 border border-green-200/40">
+        <div className="bg-slate-50 rounded-lg p-3 border border-slate-200">
           <div className="text-xs text-gray-600 mb-1">Average Shifts Per Member</div>
           <div className="text-2xl font-bold text-gray-900">{avgSlotsPerMember}
             <span className="text-xs text-gray-500 mx-1 mt-1">
@@ -82,21 +82,26 @@ export default function RosterStatsPanel({ stats, generationResult, members, act
         </div>
       )}
 
-      {/* Detailed Stats - Show Generation Result if available, otherwise member workload */}
+      {/* Detailed Stats — always computed from the CURRENT roster state so
+          quality metrics stay real-time. `generationResult` is only used above
+          for the generation-only unassignable-roles warning and below for the
+          algorithm log. */}
       {showDetails && (
         <div className="border-t border-gray-200 pt-3">
-          {generationResult ? (
-            <QualityMetrics 
-              generationResult={generationResult}
-              members={members}
-              stats={stats}
-              showRoleDiversity={true}
-              compact={true}
-            />
-          ) : (
-            <div>
-              <div className="text-sm font-semibold text-gray-700 mb-2">Member Workload Distribution</div>
-              <div className="space-y-2 max-h-64 overflow-y-auto">
+          <QualityMetrics
+            generationResult={{
+              fairnessMetrics: stats.fairnessMetrics,
+              stats: { assignedRoles: stats.assignedRoles }
+            }}
+            members={members}
+            stats={stats}
+            showRoleDiversity={true}
+            compact={true}
+          />
+
+          <div className="mt-4 pt-4 border-t border-gray-200">
+            <div className="text-sm font-semibold text-gray-700 mb-2">Member Workload Distribution</div>
+            <div className="space-y-2 max-h-64 overflow-y-auto">
                 {memberStats.map(member => (
                   <div key={member.id} className="bg-gray-50/60 rounded px-3 py-2">
                     <div className="flex items-center gap-2 text-sm">
@@ -104,7 +109,7 @@ export default function RosterStatsPanel({ stats, generationResult, members, act
                       <div className="flex-1 flex items-center gap-2">
                         <div className="flex-1 bg-gray-200 rounded-full h-2 overflow-hidden">
                           <div 
-                            className="bg-blue-500 h-full transition-all"
+                            className="bg-slate-500 h-full transition-all"
                             style={{ width: `${Math.min(member.percentageOfTotal, 100)}%` }}
                           />
                         </div>
@@ -131,7 +136,6 @@ export default function RosterStatsPanel({ stats, generationResult, members, act
                 ))}
               </div>
             </div>
-          )}
 
           {/* Generic Log — captures generation and manual swaps/updates/deletes/inserts */}
           {actionLog.length > 0 && (

@@ -82,3 +82,49 @@ export const getAvailableMembersForEvent = (event, members, constraints, allEven
 
   return availabilityByRole
 }
+
+/**
+ * Validate a proposed swap/move between two roster slots, returning whether it
+ * is allowed. A "swap" exchanges the occupants of slotA (source) and slotB
+ * (target); either occupant may be null (a move into/out of an empty slot).
+ *
+ * Rules enforced for each member landing in its new slot:
+ *  - role compatibility (full performer, or a promoted trainee for a real role),
+ *  - availability on the destination event's date,
+ *  - once-per-event (no duplicate member within a single event).
+ *
+ * The once-per-event check must ignore the slot each member is LEAVING within
+ * the event being checked. In a same-event swap both slots live in one roster
+ * array, so memberA leaves `sourceIndex` and memberB leaves `targetIndex`;
+ * ignoring the wrong index falsely reports a duplicate and blocks a legal
+ * same-event, different-role swap.
+ *
+ * @returns {boolean} true if the swap is valid
+ */
+export const canSwapRosterSlots = ({
+  memberA, memberB, eventA, eventB, sourceIndex, targetIndex,
+  slotA, slotB, members, memberConstraints, allEvents,
+}) => {
+  const memberById = (id) => members.find(m => m.id === id)
+  const sameEvent = eventA === eventB
+  const events = allEvents || [eventA, eventB]
+
+  const canOccupy = (memberId, event, slot, ignoreRoleIndex) => {
+    if (!memberId) return true // clearing a slot is always valid
+    const member = memberById(memberId)
+    if (!member || member.include === false) return false
+
+    const roleOk = canFillSlotRole(member, slot.role) ||
+      (!isUnderstudyRole(slot.role) && isPromotedForRole(member, slot.role, events, event.date))
+    if (!roleOk) return false
+
+    if (isMemberUnavailable(memberId, event.date, memberConstraints)) return false
+
+    const clash = event.roster.some((r, i) => i !== ignoreRoleIndex && r.member_id === memberId)
+    return !clash
+  }
+
+  const aOk = canOccupy(memberA, eventB, slotB, sameEvent ? sourceIndex : -1)
+  const bOk = canOccupy(memberB, eventA, slotA, sameEvent ? targetIndex : -1)
+  return aOk && bOk
+}

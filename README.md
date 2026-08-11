@@ -13,7 +13,7 @@ Components never branch on the mode — they read data and call mutations throug
 
 - **Frontend**: React 18 + Vite 5
 - **Styling**: Tailwind CSS 3
-- **Testing**: Vitest + jsdom (206 tests)
+- **Testing**: Vitest + jsdom (214 tests)
 - **YAML**: js-yaml, with CodeMirror for editing
 - **Backend (production mode)**: Supabase (Postgres + Row-Level Security + Auth)
 
@@ -22,7 +22,7 @@ Components never branch on the mode — they read data and call mutations throug
 ```bash
 npm install                # Install dependencies
 npm run dev                # Dev server → localhost:5173
-npm test                   # Run tests (206 passing)
+npm test                   # Run tests (214 passing)
 npm run test:coverage      # Coverage report
 npm run build              # Production build
 npm run preview            # Test production build locally
@@ -151,7 +151,7 @@ This section is the **binding specification** for non-obvious behavior. It recor
 
 `event.roster` is an **array** of slot objects `{ role, member_id, isGenerated? }` — *not* a role-keyed map. This is intentional so a role can appear multiple times in one event (e.g. two `support` slots, or a role plus its understudy). Any view that needs a role→member lookup must group into positional buckets (`byRole[role][index]`) rather than collapsing to a single value per role, or duplicate slots disappear.
 
-- Export **and** the on-screen Table view compute an `exportColumns` layout: for each role, the max count across all events → that many numbered columns; understudy roles get their own columns; cells are filled positionally from the per-event `byRole` buckets.
+- The CSV / "Copy to Excel" exports compute an `exportColumns` layout: for each role, the max count across all events → that many numbered columns; understudy roles get their own columns; cells are filled positionally from the per-event `byRole` buckets.
 
 ### Generated vs. locked (pre-assigned) slots
 
@@ -198,9 +198,17 @@ The system supports **understudies**: members training to perform a role, who mu
 
 **Members view**: the role filter includes understudies — filtering by `multi-vm` shows both performers and `multi-vm` trainees (`matchesRole` checks `roles` *and* `understudyFor`).
 
-### Table & export column order (real roles first, understudies last)
+### Roster statistics are real-time, not a generation snapshot
 
-The Table view and the CSV / "Copy to Excel" exports use one shared column layout (`exportColumnLayout` in `EventsView.jsx`). Columns are ordered **metadata → all real roles → all understudy columns**: date, day, reporting time, event name, then every real role (in catalog order, duplicates numbered e.g. `roving-cam 2`), then every `X-understudy` column at the end. Rationale: an understudy column right after each real role interleaved trainees with performers and made the "who is actually rostered vs. who is shadowing" split hard to scan; grouping the understudy columns at the end matches how the roster is read (performers first, understudies as a trailing block). **Missing slots render `-`** (not blank) in the table and exports so an empty cell is unambiguous.
+Roster statistics — including the quality metrics (Shift Balance / `assignmentStdDev`, Time Spacing / `spreadStdDev`, the shift-distribution bell curve, and per-member workload) — are computed from the **current** roster state on every render by `calculateRosterStats(events, members, rosterPeriod)` (`rosterStats.js`). It builds a live `AssignmentTracker` from the present `events` so the fairness/spread formulas are identical to the generator's, and returns `fairnessMetrics` + `assignedRoles`. Rationale: previously the detailed quality metrics read from the frozen `generationResult` snapshot, so hand-edits/swaps left them **stale** while the summary numbers above them updated — an inconsistency. `generationResult` is now used **only** for genuinely generation-time artifacts: the unassignable-roles warning and the algorithm log. **Invariant: anything a user can change by editing the roster must be recomputed from `events`, not read from a generation snapshot.**
+
+### Manual swap validation must ignore the slot each member is *leaving*
+
+Manual drag-and-drop / swap validation lives in the pure `canSwapRosterSlots` helper (`constraintsUtils.js`), used by `handleSwapRosterSlots` in `App.jsx` and unit-tested directly. It checks, for each member landing in its new slot: role compatibility (full performer, or a promoted trainee for a real role), availability on the destination date, and once-per-event (no duplicate member in one event). The once-per-event check **must ignore the index each member is vacating within the event being checked**: for a same-event swap the two slots share one `roster` array, so testing memberA→slotB ignores `sourceIndex` and testing memberB→slotA ignores `targetIndex`; for a cross-event swap the incoming member vacates nothing in the destination event, so ignore nothing (`-1`). **Bug fixed:** a same-event, different-role swap (e.g. moving a member from `vm` to an empty `cam-1` in the same event) was rejected because the check ignored the *source* index for both members, so memberB (or the member's own still-present entry) tripped the duplicate clash. Extracting the logic into a tested pure helper locks this in.
+
+### Export column order (real roles first, understudies last)
+
+The CSV / "Copy to Excel" exports use the shared column layout (`exportColumnLayout` in `EventsView.jsx`). Columns are ordered **metadata → all real roles → all understudy columns**: date, day, reporting time, event name, then every real role (in catalog order, duplicates numbered e.g. `roving-cam 2`), then every `X-understudy` column at the end. Rationale: an understudy column right after each real role interleaved trainees with performers and made the "who is actually rostered vs. who is shadowing" split hard to scan; grouping the understudy columns at the end matches how the roster is read (performers first, understudies as a trailing block). **Missing slots render `-`** (not blank) in the exports so an empty cell is unambiguous. (An on-screen Table view previously shared this layout but was removed as unused — the card view is the only on-screen presentation.)
 
 ### Consecutive-weekend avoidance is a Phase-2 objective term, not just a Phase-1 bias
 
