@@ -26,6 +26,7 @@ export const calculateRosterStats = (events, members, rosterPeriod) => {
   let totalSlots = 0
   const memberAssignments = {}
   const memberRoleAssignments = {} // Track role diversity per member
+  const memberDates = {} // Track each member's assignment dates for time-spacing
 
   events.forEach(event => {
     if (event.roster && Array.isArray(event.roster)) {
@@ -36,6 +37,10 @@ export const calculateRosterStats = (events, members, rosterPeriod) => {
         const memberId = assignment.member_id || assignment.id
         if (memberId) {
           memberAssignments[memberId] = (memberAssignments[memberId] || 0) + 1
+          if (event.date) {
+            if (!memberDates[memberId]) memberDates[memberId] = []
+            memberDates[memberId].push({ date: event.date, role: assignment.role || null })
+          }
           
           // Track role diversity
           if (!memberRoleAssignments[memberId]) {
@@ -72,6 +77,17 @@ export const calculateRosterStats = (events, members, rosterPeriod) => {
     const roles = memberRoleAssignments[member.id] || {}
     const uniqueRoles = Object.keys(roles).length
     const roleDistribution = roles
+
+    // Sorted (ascending) assignment entries {date, role}, so the UI can plot a
+    // timeline of dots (dot tooltip = the event assignment) and compute the
+    // week-gap between consecutive dots.
+    const assignmentDates = (memberDates[member.id] || [])
+      .slice()
+      .sort((a, b) => new Date(a.date) - new Date(b.date))
+    // Time spacing: average number of days between this member's consecutive
+    // shifts. Meaningful to a scheduler ("roughly every N days"); null when the
+    // member has fewer than two shifts (no gap to measure).
+    const avgGapDays = averageGapDays(assignmentDates.map(a => a.date))
     
     return {
       id: member.id,
@@ -80,7 +96,9 @@ export const calculateRosterStats = (events, members, rosterPeriod) => {
       avgPerMonth: avgPerMonth,
       percentageOfTotal: percentageOfTotal,
       uniqueRoles: uniqueRoles,
-      roleDistribution: roleDistribution
+      roleDistribution: roleDistribution,
+      avgGapDays: avgGapDays,
+      assignmentDates: assignmentDates
     }
   }).sort((a, b) => b.totalAssignments - a.totalAssignments)
   
@@ -100,13 +118,20 @@ export const calculateRosterStats = (events, members, rosterPeriod) => {
     }
   })
   
-  const roleStats = Object.entries(roleVariety).map(([role, memberSet]) => ({
-    role,
-    uniqueMembers: memberSet.size,
-    totalAssignments: Object.values(memberRoleAssignments).reduce(
+  const roleStats = Object.entries(roleVariety).map(([role, memberSet]) => {
+    const totalAssignments = Object.values(memberRoleAssignments).reduce(
       (sum, roles) => sum + (roles[role] || 0), 0
     )
-  }))
+    return {
+      role,
+      uniqueMembers: memberSet.size,
+      totalAssignments,
+      // Rotation ratio: fraction of a role's shifts filled by distinct people.
+      // 1.0 = every shift went to a different member (max rotation); low = the
+      // same few people repeat the role. This is the per-role rotation bar.
+      rotationRatio: totalAssignments > 0 ? memberSet.size / totalAssignments : 0
+    }
+  })
   
   const avgMembersPerRole = roleStats.length > 0 
     ? roleStats.reduce((sum, r) => sum + r.uniqueMembers, 0) / roleStats.length 
@@ -140,10 +165,31 @@ export const calculateRosterStats = (events, members, rosterPeriod) => {
     memberStats,
     fairnessMetrics,
     assignedRoles,
+    // Roster date bounds, so the Time Spacing timeline can position dots on a
+    // shared axis across all members.
+    periodStart: rosterPeriod.start_date,
+    periodEnd: rosterPeriod.end_date,
     roleDiversity: {
       roleStats: roleStats,
       avgMembersPerRole: Math.round(avgMembersPerRole * 10) / 10,
       totalRoles: roleStats.length
     }
   }
+}
+
+/**
+ * Average number of days between consecutive (date-sorted) assignments.
+ * Returns null when there are fewer than two dates — a single shift has no gap
+ * to measure, so callers can render "—" rather than a misleading 0.
+ * @param {string[]|undefined} dates
+ * @returns {number|null}
+ */
+function averageGapDays(dates) {
+  if (!dates || dates.length < 2) return null
+  const sorted = dates.map(d => new Date(d).getTime()).sort((a, b) => a - b)
+  let totalGap = 0
+  for (let i = 1; i < sorted.length; i++) {
+    totalGap += (sorted[i] - sorted[i - 1]) / (1000 * 60 * 60 * 24)
+  }
+  return Math.round((totalGap / (sorted.length - 1)) * 10) / 10
 }

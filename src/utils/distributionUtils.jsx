@@ -92,11 +92,12 @@ export function BellCurveChart({ sortedDistribution, maxMemberCount, members = [
 
   return (
     <div className="relative">
-      <div className="flex items-end justify-center gap-3 px-8" style={{ height: '96px' }}>
+      <div className="flex items-end justify-center gap-3 px-8" style={{ height: '116px' }}>
         {sortedDistribution.map(({ shiftCount, memberCount, memberIds }) => {
-          // Reserve space for label (20px) and gap (4px)
+          // Reserve space for the count label above (~16px), the shift-count
+          // label below (~20px), and gaps.
           const maxBarHeight = 72
-          const heightPixels = Math.max((memberCount / maxMemberCount) * maxBarHeight, 12)
+          const heightPixels = Math.max((memberCount / maxMemberCount) * maxBarHeight, 8)
           const isHovered = hoveredBar === shiftCount
           
           return (
@@ -107,33 +108,37 @@ export function BellCurveChart({ sortedDistribution, maxMemberCount, members = [
               onMouseEnter={() => setHoveredBar(shiftCount)}
               onMouseLeave={() => setHoveredBar(null)}
             >
-              <div 
-                className={`w-full rounded-t transition-all cursor-pointer flex items-start justify-center ${
-                  isHovered ? 'bg-slate-700 ring-2 ring-slate-400' : 'bg-slate-500 hover:bg-slate-600'
-                }`}
-                style={{ 
-                  height: `${heightPixels}px`
-                }}
-              >
-                <div className="text-white text-xs font-bold pt-1">
-                  {memberCount}
-                </div>
+              {/* Count sits ABOVE the bar so it never spills out of short bars. */}
+              <div className="text-slate-500 text-xs font-bold leading-none">
+                {memberCount}
               </div>
+              <div
+                className={`w-full rounded-t transition-all cursor-pointer ${
+                  isHovered ? 'ring-2 ring-slate-300' : ''
+                }`}
+                style={{
+                  height: `${heightPixels}px`,
+                  background: isHovered
+                    ? 'linear-gradient(to top, #64748b, #94a3b8)'
+                    : 'linear-gradient(to top, #94a3b8, #cbd5e1)'
+                }}
+              />
               <div className="text-xs font-semibold text-gray-700">{shiftCount}</div>
               
-              {/* Tooltip with member names */}
+              {/* Tooltip with member names — light translucent glass, matching
+                  the roster-stats theme */}
               {isHovered && memberIds && memberIds.length > 0 && (
-                <div className="absolute bottom-full mb-2 bg-gray-900 text-white text-xs rounded-lg py-2 px-3 shadow-xl z-50 whitespace-nowrap max-w-xs">
+                <div className="absolute bottom-full mb-2 rounded-lg border border-white/60 bg-white/80 py-2 px-3 text-xs text-slate-700 shadow-lg backdrop-blur-md z-50 whitespace-nowrap max-w-xs">
                   <div className="font-semibold mb-1">
                     {memberCount} member{memberCount > 1 ? 's' : ''} with {shiftCount} shift{shiftCount > 1 ? 's' : ''}:
                   </div>
-                  <div className="space-y-0.5">
+                  <div className="space-y-0.5 text-slate-600">
                     {memberIds.map((memberId, idx) => (
                       <div key={idx}>• {getMemberName(memberId)}</div>
                     ))}
                   </div>
                   {/* Arrow */}
-                  <div className="absolute top-full left-1/2 -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900"></div>
+                  <div className="absolute left-1/2 top-full h-2 w-2 -translate-x-1/2 -translate-y-1/2 rotate-45 border-b border-r border-white/60 bg-white/80"></div>
                 </div>
               )}
             </div>

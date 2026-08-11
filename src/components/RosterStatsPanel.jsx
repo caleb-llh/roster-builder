@@ -27,15 +27,15 @@ export default function RosterStatsPanel({ stats, generationResult, members, act
     return null
   }
 
-  const { totalSlots, totalEvents, monthCount, avgSlotsPerEvent, avgSlotsPerMonth, avgSlotsPerMember, memberStats } = stats
+  const { totalSlots, totalEvents, monthCount, avgSlotsPerEvent, avgSlotsPerMonth, avgSlotsPerMember } = stats
 
   return (
     <div className="bg-white/40 backdrop-blur-md border border-white/30 rounded-lg shadow-lg p-4 mb-6">
-      <div className="flex items-center justify-between mb-2">
-        <h3 className="text-lg font-semibold text-gray-900">Roster Statistics</h3>
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-sm font-semibold uppercase tracking-[0.2em] text-gray-800">Roster Statistics</h3>
         <button
           onClick={() => setShowDetails(!showDetails)}
-          className="text-xs text-slate-600 hover:text-slate-900 font-medium"
+          className="text-[11px] font-medium uppercase tracking-wider text-slate-500 hover:text-slate-800"
         >
           {showDetails ? '▼ Hide Details' : '▶ Show Details'}
         </button>
@@ -43,18 +43,18 @@ export default function RosterStatsPanel({ stats, generationResult, members, act
 
       {/* Summary Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
-        <div className="bg-slate-50 rounded-lg p-3 border border-slate-200">
-          <div className="text-xs text-gray-600 mb-1">Total Shifts Required</div>
-          <div className="text-2xl font-bold text-gray-900">{totalSlots}</div>
+        <div className="bg-white/50 backdrop-blur-sm rounded-lg p-3 border border-white/40 shadow-sm">
+          <div className="text-[11px] font-medium uppercase tracking-wider text-gray-500 mb-1">Total Shifts Required</div>
+          <div className="text-2xl font-bold tracking-tight text-gray-900">{totalSlots}</div>
           <div className="text-xs text-gray-500 mt-1">
             Across {totalEvents} events over {monthCount} {monthCount === 1 ? 'month' : 'months'}
           </div>
         </div>
 
-        <div className="bg-slate-50 rounded-lg p-3 border border-slate-200">
-          <div className="text-xs text-gray-600 mb-1">Average Shifts Per Member</div>
-          <div className="text-2xl font-bold text-gray-900">{avgSlotsPerMember}
-            <span className="text-xs text-gray-500 mx-1 mt-1">
+        <div className="bg-white/50 backdrop-blur-sm rounded-lg p-3 border border-white/40 shadow-sm">
+          <div className="text-[11px] font-medium uppercase tracking-wider text-gray-500 mb-1">Average Shifts Per Member</div>
+          <div className="text-2xl font-bold tracking-tight text-gray-900">{avgSlotsPerMember}
+            <span className="ml-1 text-[11px] font-normal uppercase tracking-wide text-gray-400">
                 shifts/roster
             </span>
           </div>
@@ -67,7 +67,7 @@ export default function RosterStatsPanel({ stats, generationResult, members, act
       {/* Unassignable Roles Warning */}
       {generationResult?.stats?.unassignableRoles && generationResult.stats.unassignableRoles.length > 0 && (
         <div className="bg-red-50 rounded-lg p-3 border border-red-200 mb-3">
-          <div className="text-xs font-semibold text-red-900 mb-2">
+          <div className="text-[11px] font-semibold uppercase tracking-wider text-red-800 mb-2">
             ⚠️ Unassignable Roles ({generationResult.stats.unassignableRoles.length})
           </div>
           <div className="space-y-1.5 text-xs max-h-32 overflow-y-auto">
@@ -99,55 +99,17 @@ export default function RosterStatsPanel({ stats, generationResult, members, act
             compact={true}
           />
 
-          <div className="mt-4 pt-4 border-t border-gray-200">
-            <div className="text-sm font-semibold text-gray-700 mb-2">Member Workload Distribution</div>
-            <div className="space-y-2 max-h-64 overflow-y-auto">
-                {memberStats.map(member => (
-                  <div key={member.id} className="bg-gray-50/60 rounded px-3 py-2">
-                    <div className="flex items-center gap-2 text-sm">
-                      <span className="font-medium text-gray-900 min-w-[120px]">{member.name}</span>
-                      <div className="flex-1 flex items-center gap-2">
-                        <div className="flex-1 bg-gray-200 rounded-full h-2 overflow-hidden">
-                          <div 
-                            className="bg-slate-500 h-full transition-all"
-                            style={{ width: `${Math.min(member.percentageOfTotal, 100)}%` }}
-                          />
-                        </div>
-                        <span className="text-gray-600 min-w-[80px]">
-                          {member.totalAssignments} shifts
-                        </span>
-                        <span className="text-gray-500 text-xs min-w-[70px]">
-                          ({Math.round(member.avgPerMonth * 10) / 10}/month)
-                        </span>
-                      </div>
-                    </div>
-                    {member.uniqueRoles > 0 && (
-                      <div className="mt-1 ml-[120px] flex items-center gap-2 text-xs text-gray-500">
-                        <span>🎭 {member.uniqueRoles} {member.uniqueRoles === 1 ? 'role' : 'roles'}:</span>
-                        <span>
-                          {Object.entries(member.roleDistribution)
-                            .sort((a, b) => b[1] - a[1])
-                            .map(([role, count]) => `${role}(${count})`)
-                            .join(', ')}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-
           {/* Generic Log — captures generation and manual swaps/updates/deletes/inserts */}
           {actionLog.length > 0 && (
-            <details className="mt-3 rounded-lg border border-gray-200 bg-gray-50">
-              <summary className="cursor-pointer select-none px-3 py-2 text-sm font-medium text-gray-600 hover:text-gray-900">
-                Log <span className="text-gray-400">({actionLog.length} entries)</span>
+            <details className="mt-3 rounded-lg border border-white/40 bg-white/40 backdrop-blur-sm shadow-sm">
+              <summary className="cursor-pointer select-none px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-gray-600 hover:text-gray-900">
+                Log <span className="font-normal normal-case tracking-normal text-gray-400">({actionLog.length} entries)</span>
               </summary>
               <div className="border-t border-gray-200 px-3 py-3">
                 <div className="flex justify-end mb-2">
                   <button
                     onClick={() => navigator.clipboard?.writeText(actionLog.map(formatEntry).join('\n'))}
-                    className="text-xs font-medium text-gray-500 hover:text-gray-800"
+                    className="text-[11px] font-medium uppercase tracking-wide text-gray-400 hover:text-gray-700"
                   >
                     Copy
                   </button>

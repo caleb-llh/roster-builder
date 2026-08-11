@@ -214,5 +214,50 @@ describe('rosterStats', () => {
       expect(stats.fairnessMetrics.assignmentsByMember.john.total).toBe(3)
       expect(stats.fairnessMetrics.assignmentStdDev).toBeGreaterThan(0)
     })
+
+    it('computes per-role rotation ratio (distinct members / assignments)', () => {
+      const stats = calculateRosterStats(events, members, rosterPeriod)
+      const byRole = Object.fromEntries(
+        stats.roleDiversity.roleStats.map(r => [r.role, r])
+      )
+      // vm: john(x2) + jane(x1) => 2 distinct members over 3 assignments.
+      expect(byRole.vm.uniqueMembers).toBe(2)
+      expect(byRole.vm.totalAssignments).toBe(3)
+      expect(byRole.vm.rotationRatio).toBeCloseTo(2 / 3, 5)
+      // cam-1: only jane is assigned (the null slot is not counted) => ratio 1.
+      expect(byRole['cam-1'].uniqueMembers).toBe(1)
+      expect(byRole['cam-1'].totalAssignments).toBe(1)
+      expect(byRole['cam-1'].rotationRatio).toBe(1)
+    })
+
+    it('computes per-member average gap in days between consecutive shifts', () => {
+      const stats = calculateRosterStats(events, members, rosterPeriod)
+      const john = stats.memberStats.find(m => m.id === 'john')
+      // john: 2026-02-07 and 2026-02-14 => single 7-day gap.
+      expect(john.avgGapDays).toBe(7)
+      const jane = stats.memberStats.find(m => m.id === 'jane')
+      // jane: 2026-02-07 and 2026-03-07 => single 28-day gap.
+      expect(jane.avgGapDays).toBe(28)
+    })
+
+    it('reports null avgGapDays for members with fewer than two shifts', () => {
+      const single = [
+        { date: '2026-02-07', roster: [{ role: 'vm', member_id: 'john' }] }
+      ]
+      const stats = calculateRosterStats(single, members, rosterPeriod)
+      const john = stats.memberStats.find(m => m.id === 'john')
+      expect(john.avgGapDays).toBeNull()
+    })
+
+    it('exposes sorted assignment dates and roster period bounds for the timeline', () => {
+      const stats = calculateRosterStats(events, members, rosterPeriod)
+      const john = stats.memberStats.find(m => m.id === 'john')
+      expect(john.assignmentDates).toEqual([
+        { date: '2026-02-07', role: 'vm' },
+        { date: '2026-02-14', role: 'vm' }
+      ])
+      expect(stats.periodStart).toBe(rosterPeriod.start_date)
+      expect(stats.periodEnd).toBe(rosterPeriod.end_date)
+    })
   })
 })
