@@ -23,7 +23,10 @@ roles:
 #   name: full display name
 #   telegram: Telegram handle for notifications
 #   include: whether to include in automatic roster generation
-#   roles: list of roles this member can perform
+#   roles: list of roles this member can perform. Each entry is an object:
+#          - name: <role>                 # a role the member can FULLY perform
+#          - name: <role>                 # a role the member is TRAINING for;
+#            understudy: true             #   they must shadow it before performing
 
 members:
   - id: member-1-alice
@@ -31,40 +34,41 @@ members:
     telegram: "@alice"
     include: true    # Include in roster generation
     roles:
-      - lead         # Can perform all three roles
-      - support
-      - backup
+      - name: lead         # Can perform all three roles
+      - name: support
+      - name: backup
   
   - id: member-2-bob
     name: Bob Smith
     telegram: "@bob"
     include: true
     roles:
-      - lead         # Can perform lead and support
-      - support
+      - name: lead         # Can perform lead and support
+      - name: support
   
   - id: member-3-charlie
     name: Charlie Davis
     telegram: "@charlie"
     include: true
     roles:
-      - support      # Can perform support and backup
-      - backup
+      - name: support      # Can perform support; training for lead
+      - name: lead         # Understudy: must shadow `lead` before performing it
+        understudy: true
   
   - id: member-4-diana
     name: Diana Lee
     telegram: "@diana"
     include: true
     roles:
-      - support
-      - backup
+      - name: support
+      - name: backup
   
   - id: member-5-ethan
     name: Ethan Brown
     telegram: "@ethan"
     include: false   # Not included in roster generation (inactive)
     roles:
-      - backup
+      - name: backup
 
 ###########################
 #### Define the demand ####

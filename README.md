@@ -13,7 +13,7 @@ Components never branch on the mode — they read data and call mutations throug
 
 - **Frontend**: React 18 + Vite 5
 - **Styling**: Tailwind CSS 3
-- **Testing**: Vitest + jsdom (214 tests)
+- **Testing**: Vitest + jsdom
 - **YAML**: js-yaml, with CodeMirror for editing
 - **Backend (production mode)**: Supabase (Postgres + Row-Level Security + Auth)
 
@@ -22,7 +22,7 @@ Components never branch on the mode — they read data and call mutations throug
 ```bash
 npm install                # Install dependencies
 npm run dev                # Dev server → localhost:5173
-npm test                   # Run tests (214 passing)
+npm test                   # Run tests
 npm run test:coverage      # Coverage report
 npm run build              # Production build
 npm run preview            # Test production build locally
@@ -153,6 +153,10 @@ This section is the **binding specification** for non-obvious behavior. It recor
 
 - The CSV / "Copy to Excel" exports compute an `exportColumns` layout: for each role, the max count across all events → that many numbered columns; understudy roles get their own columns; cells are filled positionally from the per-event `byRole` buckets.
 
+### `sample.yaml` is the canonical valid-schema example
+
+[`public/sample.yaml`](public/sample.yaml) is the **single source of truth for what a valid input document looks like**. It must always parse (`js-yaml`) and pass `runAllValidators` with zero errors, and it should exercise every supported field so that reading it teaches the full schema — including the object form of member `roles` (`- name: <role>`) and the `understudy: true` flag. When the schema changes, update `sample.yaml` in the same change (it is part of the [feedback loop](#developer-workflow)); a stale sample is a spec regression. Member `roles` accept both the object form and a bare string for backward compatibility (`normalizeMemberRoles` handles both), but the sample and new documents use the object form for consistency and to make the understudy flag expressible.
+
 ### Generated vs. locked (pre-assigned) slots
 
 - A slot with `isGenerated: true` was placed by the generator and may be freely moved/replaced.
@@ -259,6 +263,10 @@ Value coercion is a small plain-JS map (`constraintCoercers`) in the same file �
 
 ### YAML structure reference
 
+[`public/sample.yaml`](public/sample.yaml) is the **canonical, always-valid example** of the input schema: it must parse and pass `runAllValidators` with no errors, and it demonstrates every supported field (including the object-form `roles` and the understudy flag). Keep it in sync when the schema changes — see the [Design Decision on the sample document](#sampleyaml-is-the-canonical-valid-schema-example).
+
+Member `roles` entries are objects (`- name: <role>`); a plain string (`- lead`) is still accepted for backward compatibility, but new documents and the sample should use the object form. Add `understudy: true` to flag a role the member is training for.
+
 The expected format (see [`public/sample.yaml`](public/sample.yaml)):
 
 ```yaml
@@ -272,7 +280,10 @@ roles:                       # Roles defined per roster (data, not defaults)
 members:                     # Team members
   - id: "member-1"
     name: "Alice"
-    roles: ["lead", "support"]
+    roles:                   # each entry is an object with a `name`
+      - name: "lead"         # a role the member can fully perform
+      - name: "support"
+        understudy: true     # optional: training for `support` (see Understudy feature)
     include: true            # include in automatic generation
     telegram: "@alice"
 

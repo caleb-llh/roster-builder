@@ -1,4 +1,7 @@
 import { describe, it, expect } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
+import yaml from 'js-yaml'
 import {
   ValidationBuilder,
   validateYamlStructure,
@@ -7,7 +10,8 @@ import {
   validateRoles,
   validateEventMemberMapping,
   validateRosterPeriod,
-  validateMemberConstraints
+  validateMemberConstraints,
+  runAllValidators
 } from './validators'
 
 describe('validators', () => {
@@ -333,6 +337,35 @@ describe('validators', () => {
       const result = validateMemberConstraints(data)
       
       expect(result.warnings.some(w => w.includes('John'))).toBe(true)
+    })
+  })
+
+  // Binding-spec invariant: public/sample.yaml is the canonical, always-valid
+  // example of the input schema (see README Design Decisions). It must parse
+  // and pass every validator with zero errors.
+  describe('public/sample.yaml (canonical schema example)', () => {
+    const samplePath = join(process.cwd(), 'public', 'sample.yaml')
+    const data = yaml.load(readFileSync(samplePath, 'utf8'))
+
+    it('parses to an object', () => {
+      expect(data).toBeTypeOf('object')
+      expect(Array.isArray(data.members)).toBe(true)
+    })
+
+    it('passes runAllValidators with no errors', () => {
+      const result = runAllValidators(data)
+      expect(result.errors).toEqual([])
+      expect(result.isValid).toBe(true)
+    })
+
+    it('uses the object form for member roles and demonstrates the understudy flag', () => {
+      const allRoleEntries = data.members.flatMap(m => m.roles || [])
+      expect(allRoleEntries.length).toBeGreaterThan(0)
+      allRoleEntries.forEach(entry => {
+        expect(entry).toBeTypeOf('object')
+        expect(typeof entry.name).toBe('string')
+      })
+      expect(allRoleEntries.some(e => e.understudy === true)).toBe(true)
     })
   })
 })
