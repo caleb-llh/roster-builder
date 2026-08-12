@@ -20,7 +20,7 @@ function Tooltip({ children }) {
 
 /**
  * Shared component for displaying quality metrics (shift balance, time spacing, role rotation)
- * Used by both RosterStatsPanel and GenerationResultModal
+ * Used by RosterStatsPanel (compact and full views)
  */
 export default function QualityMetrics({ generationResult, members, stats, showRoleDiversity = true, compact = false }) {
   if (!generationResult) return null
@@ -148,7 +148,7 @@ export default function QualityMetrics({ generationResult, members, stats, showR
     )
   }
 
-  // Full view for GenerationResultModal
+  // Full view (RosterStatsPanel "Show Details")
   return (
     <div className="rounded-lg">
       <h3 className={`${tierTitle} mb-2`}>Quality Metrics</h3>

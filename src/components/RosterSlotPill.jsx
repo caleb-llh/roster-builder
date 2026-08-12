@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
-import { glassMenu, hoverRow, btnDanger, monoChip } from '../utils/statsTheme'
+import { glassMenu, glassPopup, hoverRow, btnDanger, monoChip, zInCard } from '../utils/statsTheme'
+import { HoverCard } from './SharedComponents'
 
 /**
  * A single roster slot rendered as a pillbox with an inline dropdown picker.
@@ -170,29 +171,30 @@ export default function RosterSlotPill({
     >
       {diffMeta && (
         <span
-          className="group/diff absolute -left-1 -top-1 z-10"
+          className="absolute -left-1 -top-1 z-10"
           onMouseDown={(e) => e.stopPropagation()}
         >
-          <span className={`block h-2 w-2 rounded-full ring-2 ring-white ${diffMeta.cls}`} />
-          <span
-            role="tooltip"
-            className="pointer-events-none absolute left-1/2 top-3 z-30 hidden -translate-x-1/2 whitespace-nowrap rounded-md bg-gray-900 px-2 py-1 text-[11px] leading-tight text-white shadow-lg group-hover/diff:block"
+          <HoverCard
+            placement="bottom"
+            align="start"
+            panelClassName={`w-max max-w-[16rem] px-2 py-1 text-[11px] leading-tight ${glassPopup}`}
+            trigger={<span className={`block h-2 w-2 rounded-full ring-2 ring-white ${diffMeta.cls}`} />}
           >
-            <span className="font-semibold">{diffMeta.label} · unsaved</span>
+            <span className="font-semibold text-slate-800">{diffMeta.label} · unsaved</span>
             <br />
-            <span className="text-gray-300">{diffChange.role}: </span>
+            <span className="text-slate-500">{diffChange.role}: </span>
             {diffChange.status === 'added' ? (
               <span>{diffChange.afterLabel || 'unassigned'}</span>
             ) : diffChange.status === 'removed' ? (
               <span className="line-through">{diffChange.beforeLabel || 'unassigned'}</span>
             ) : (
               <span>
-                <span className="line-through text-gray-400">{diffChange.beforeLabel || 'unassigned'}</span>
+                <span className="line-through text-slate-400">{diffChange.beforeLabel || 'unassigned'}</span>
                 {' → '}
                 <span>{diffChange.afterLabel || 'unassigned'}</span>
               </span>
             )}
-          </span>
+          </HoverCard>
         </span>
       )}
       <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded border border-gray-200/70 bg-white/30 text-xs font-medium ${roleColorClass}`}>
@@ -267,7 +269,7 @@ export default function RosterSlotPill({
       )}
 
       {open && editable && !confirming && (
-        <div className={`absolute left-0 top-full z-20 mt-1 max-h-52 w-52 overflow-y-auto ${glassMenu}`}>
+        <div className={`absolute left-0 top-full ${zInCard} mt-1 max-h-52 w-52 overflow-y-auto ${glassMenu}`}>
           {candidates.length === 0 ? (
             <div className="px-3 py-2 text-xs italic text-gray-400">
               No available members
@@ -293,7 +295,7 @@ export default function RosterSlotPill({
       )}
 
       {confirming && editable && (
-        <div className={`absolute left-0 top-full z-30 mt-1 w-56 p-3 ${glassMenu}`}>
+        <div className={`absolute left-0 top-full ${zInCard} mt-1 w-56 p-3 ${glassMenu}`}>
           <p className="text-xs text-gray-700">
             {confirming.type === 'remove'
               ? <>Remove <span className="font-semibold">{memberLabel}</span> from this slot?</>

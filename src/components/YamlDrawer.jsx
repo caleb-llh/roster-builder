@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import yaml from 'js-yaml'
 import CodeMirror from '@uiw/react-codemirror'
 import { yaml as yamlLang } from '@codemirror/lang-yaml'
-import { modalBackdrop, hoverRow } from '../utils/statsTheme'
+import { modalBackdrop, hoverRow, zModal } from '../utils/statsTheme'
 import { ModalHeader } from './SharedComponents'
 
 /**
@@ -123,13 +123,13 @@ export default function YamlDrawer({ open, onClose, data, onReplace, onImport })
     <>
       {/* Backdrop */}
       <div
-        className={`fixed inset-0 z-40 ${modalBackdrop} transition-opacity ${open ? 'opacity-100' : 'pointer-events-none opacity-0'}`}
+        className={`fixed inset-0 ${zModal} ${modalBackdrop} transition-opacity ${open ? 'opacity-100' : 'pointer-events-none opacity-0'}`}
         onClick={onClose}
       />
 
       {/* Drawer: bottom-sheet on mobile, right-side drawer on sm+ */}
       <aside
-        className={`fixed z-50 flex transform flex-col bg-white/85 backdrop-blur-xl shadow-2xl transition-transform duration-300 ease-out
+        className={`fixed ${zModal} flex transform flex-col bg-white/85 backdrop-blur-xl shadow-2xl transition-transform duration-300 ease-out
           inset-x-0 bottom-0 h-[85vh] rounded-t-2xl pb-safe sm:pb-0
           sm:inset-y-0 sm:right-0 sm:left-auto sm:h-full sm:w-full sm:max-w-xl sm:rounded-none
           ${open ? 'translate-y-0 sm:translate-x-0' : 'translate-y-full sm:translate-x-full sm:translate-y-0'}`}

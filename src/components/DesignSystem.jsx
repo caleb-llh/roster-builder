@@ -43,6 +43,7 @@ const {
   tabInactive,
   semanticError,
   semanticWarning,
+  draftBar,
   errorChip,
   warningChip,
   ringError,
@@ -165,6 +166,9 @@ export default function DesignSystem() {
           <Token name="semanticWarning" note="Warnings unified on amber (not yellow)">
             <div className={`${semanticWarning} rounded p-2 text-sm`}>Warning surface</div>
           </Token>
+          <Token name="draftBar" note="The one saturated surface — highest-urgency 'unsaved changes' chrome">
+            <div className={`${draftBar} rounded p-2 text-sm text-amber-900`}>3 unsaved changes</div>
+          </Token>
           <Token name="errorChip">
             <span className={`${errorChip} inline-block rounded px-2 py-0.5 text-xs`}>error</span>
           </Token>
@@ -177,6 +181,21 @@ export default function DesignSystem() {
           <Token name="ringWarning">
             <div className={`${ringWarning} ${glassCard} p-2 text-sm text-gray-700`}>ringWarning</div>
           </Token>
+        </Section>
+
+        {/* --- Z-index scale --- */}
+        <Section title="Z-index scale (stacking order)">
+          {[
+            ['zInCard', theme.zInCard, 'Card-local overlays (slot pickers, badges)'],
+            ['zSticky', theme.zSticky, 'Pinned chrome: draft bar, tabs, select toolbar, month selector, menus'],
+            ['zPopover', theme.zPopover, 'Dropdowns/pickers that must escape sticky chrome; the FAB cluster'],
+            ['zToast', theme.zToast, 'Transient toasts — above sticky/popovers, below modals'],
+            ['zModal', theme.zModal, 'Modals, the YAML drawer, and their backdrops (topmost)'],
+          ].map(([name, cls, note]) => (
+            <Token key={name} name={name} note={note}>
+              <code className={`inline-block rounded px-2 py-0.5 text-xs ${monoChip}`}>{cls}</code>
+            </Token>
+          ))}
         </Section>
 
         {/* --- Functional colour --- */}

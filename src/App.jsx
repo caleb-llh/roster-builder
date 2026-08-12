@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useLayoutEffect } from 'react'
 import { createRoleColorMap, formatDateRange, formatDate } from './utils/colorUtils'
 import { calculateRosterStats } from './utils/rosterStats'
 import { validateEventAssignments } from './utils/assignmentValidator'
@@ -9,26 +9,34 @@ import { useRosterData } from './hooks/useRosterData'
 import { canSwapRosterSlots } from './utils/constraintsUtils'
 import { buildBulkClear } from './utils/bulkClear'
 import { getActiveConstraints, getActivePreferences, getConstraintDescription, getPreferenceDescription, MEMBER_PREF_FIELDS } from './schema/rosterSchema'
-import { ErrorDisplay, GlassFab } from './components/SharedComponents'
+import { ErrorDisplay, GlassFab, HoverCard } from './components/SharedComponents'
 import MembersView from './components/MembersView'
 import EventsView from './components/EventsView'
 import RosterStatsPanel from './components/RosterStatsPanel'
 import AlgorithmDescriptionModal from './components/AlgorithmDescriptionModal'
-import GenerationResultModal from './components/GenerationResultModal'
 import ChangeReviewPanel from './components/ChangeReviewPanel'
 import YamlDrawer from './components/YamlDrawer'
 import AdminModal from './components/AdminModal'
-import { headingPage, headingModal, glassModal, glassCard, modalBackdrop, btnDanger, btnPrimary, tabActive, tabInactive, monoChip, semanticError, glassPanel, tierSection } from './utils/statsTheme'
+import { headingPage, headingModal, glassModal, glassCard, modalBackdrop, btnDanger, btnPrimary, tabActive, tabInactive, monoChip, semanticError, glassPanel, draftBar, tierSection, zSticky, zPopover, zToast, zModal } from './utils/statsTheme'
 
 function App({ auth }) {
   // UI State
   const [searchQuery, setSearchQuery] = useState('')
-  const [showGenerationModal, setShowGenerationModal] = useState(false)
   const [showDrawer, setShowDrawer] = useState(false)
   const [showAdmin, setShowAdmin] = useState(false)
-  const [activeTab, setActiveTab] = useState('members') // mobile-only: 'members' | 'events'
+  const [activeTab, setActiveTab] = useState('events') // mobile-only: 'events' | 'members'
   const [showAlgorithmModal, setShowAlgorithmModal] = useState(false)
   const [generationResult, setGenerationResult] = useState(null)
+  const [generationNotice, setGenerationNotice] = useState(null) // transient neutral toast after generating
+  // Height of the pinned "unsaved changes" bar, so other sticky toolbars (the
+  // Events select bar) can offset below it instead of being obstructed.
+  const draftBarRef = useRef(null)
+  const [draftBarHeight, setDraftBarHeight] = useState(0)
+  // Mobile tab switcher: also sticky, pinned below the draft bar. Measured so
+  // the (further-down) select toolbar can clear BOTH bars. On desktop the tab
+  // bar is `lg:hidden` → offsetHeight 0, so this contributes nothing there.
+  const tabBarRef = useRef(null)
+  const [tabBarHeight, setTabBarHeight] = useState(0)
   const [swapNotice, setSwapNotice] = useState(null)
   const [pendingSwap, setPendingSwap] = useState(null) // { nextEvents, logEntry, message } awaiting confirmation
   const [showChanges, setShowChanges] = useState(false) // expand the uncommitted-changes review list
@@ -160,15 +168,24 @@ function App({ auth }) {
     return result
   }
 
-  // Handle roster generation - show description modal first
+  // Generate the roster immediately. Generation is non-destructive — it lands
+  // in the draft and is fully undoable (Ctrl/Cmd+Z), so there is no pre-action
+  // gate: clicking Auto runs it. The "how it works" explainer is on-demand (the
+  // info FAB) rather than a mandatory step. A transient toast confirms the run;
+  // the persistent detail (unassignable roles + quality metrics) lives in the
+  // Roster Statistics panel, so a separate result modal would be redundant.
   const handleGenerateRoster = () => {
-    setShowAlgorithmModal(true)
-  }
-
-  // Actually generate the roster after user confirms
-  const handleConfirmGeneration = () => {
-    setShowAlgorithmModal(false)
     try {
+      // Count slots empty BEFORE this run so we can report how many THIS run
+      // filled. We can't trust stats.generatedAssignments for the toast: it
+      // counts every slot tagged `isGenerated` in the whole roster (including
+      // slots filled by earlier, still-uncommitted runs), so on a mostly-full
+      // roster it reads e.g. "53" when this click only filled 1 empty slot.
+      const emptyBefore = events.reduce(
+        (n, ev) => n + (ev.roster?.filter((r) => !r.member_id).length ?? 0),
+        0
+      )
+
       const result = generateRoster(
         events,
         members,
@@ -178,11 +195,20 @@ function App({ auth }) {
         rosterPreferences,
         rosterPeriod
       )
-      
+
       updateEvents(result.events)
       logAction(result.logEntries)
       setGenerationResult(result)
-      setShowGenerationModal(true)
+
+      // filled-this-run = (slots empty before) − (slots still unassignable after)
+      const unassignable = result.stats?.unassignableRoles?.length ?? 0
+      const filled = Math.max(0, emptyBefore - unassignable)
+      setGenerationNotice(
+        filled === 0 && unassignable === 0
+          ? 'Nothing to generate — all slots already filled'
+          : `Filled ${filled} slot${filled === 1 ? '' : 's'}${unassignable > 0 ? ` · ${unassignable} unassignable` : ''}`
+      )
+      setTimeout(() => setGenerationNotice(null), 4000)
     } catch (err) {
       setError({ type: 'generation', message: err.message })
     }
@@ -236,6 +262,37 @@ function App({ auth }) {
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [permissions.canUndo, undo, redo])
+
+  // Measure the pinned draft bar so sticky toolbars below it (the Events select
+  // bar) can offset by its height instead of being hidden behind it. Re-measures
+  // when the bar appears/disappears or its expandable review list toggles.
+  useLayoutEffect(() => {
+    const el = draftBarRef.current
+    if (!el) {
+      setDraftBarHeight(0)
+      return
+    }
+    const measure = () => setDraftBarHeight(el.offsetHeight)
+    measure()
+    const ro = new ResizeObserver(measure)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [hasUncommitted, permissions.canEditRoster, showChanges])
+
+  // Measure the mobile tab switcher (see tabBarHeight above). Observed always;
+  // ResizeObserver reports 0 while it is `lg:hidden` (display:none) on desktop.
+  useLayoutEffect(() => {
+    const el = tabBarRef.current
+    if (!el) {
+      setTabBarHeight(0)
+      return
+    }
+    const measure = () => setTabBarHeight(el.offsetHeight)
+    measure()
+    const ro = new ResizeObserver(measure)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
 
   // Handle a manual roster slot edit from the Events view.
   // memberId === null removes the current occupant; otherwise inserts/replaces.
@@ -618,7 +675,7 @@ function App({ auth }) {
           yet saved to the binding. Shows what changed + who is affected, with
           Save / Discard. Undo/redo are independent of this (see spec). */}
       {hasUncommitted && permissions.canEditRoster && (
-        <div className="sticky top-0 z-40 border-b border-amber-300 bg-amber-50/95 backdrop-blur-md">
+        <div ref={draftBarRef} className={`sticky top-0 ${zSticky} ${draftBar}`}>
           <div className="max-w-full px-3 sm:px-6 lg:px-8 py-2 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
             <div className="flex-1 min-w-0 text-sm text-amber-900">
               <button
@@ -668,39 +725,28 @@ function App({ auth }) {
         </div>
       )}
 
-      {/* Mobile tab switcher (hidden on lg where both panels show side-by-side) */}
-      <div className="lg:hidden sticky top-0 z-30 flex bg-white/70 backdrop-blur-md border-b border-gray-200">
-        <button
-          onClick={() => setActiveTab('members')}
-          className={`flex-1 py-3 text-sm font-semibold transition-colors touch-manipulation ${activeTab === 'members' ? tabActive : tabInactive}`}
-        >
-          Members <span className="text-xs font-normal">({activeMembers.length})</span>
-        </button>
+      {/* Mobile tab switcher (hidden on lg where both panels show side-by-side).
+          Pins BELOW the draft bar (offset by its measured height) so the two
+          sticky bars stack instead of overlapping. */}
+      <div ref={tabBarRef} className={`lg:hidden sticky ${zSticky} flex bg-white/70 backdrop-blur-md border-b border-gray-200`} style={{ top: draftBarHeight }}>
         <button
           onClick={() => setActiveTab('events')}
           className={`flex-1 py-3 text-sm font-semibold transition-colors touch-manipulation ${activeTab === 'events' ? tabActive : tabInactive}`}
         >
           Events <span className="text-xs font-normal">({events.length})</span>
         </button>
+        <button
+          onClick={() => setActiveTab('members')}
+          className={`flex-1 py-3 text-sm font-semibold transition-colors touch-manipulation ${activeTab === 'members' ? tabActive : tabInactive}`}
+        >
+          Members <span className="text-xs font-normal">({activeMembers.length})</span>
+        </button>
       </div>
 
       {/* Split View Container */}
       <div className="flex flex-col lg:flex-row pb-24 lg:pb-safe">
-        {/* Members Section */}
-        <div className={`${activeTab === 'members' ? 'block' : 'hidden'} lg:block w-full lg:w-5/12 lg:border-r border-gray-200 pb-4 lg:pb-0`}>
-          <MembersView 
-            members={members}
-            roles={roles}
-            roleColorMap={roleColorMap}
-            warnings={data?.warnings}
-            searchQuery={searchQuery}
-            memberConstraints={memberConstraints}
-            memberPreferences={memberPreferences}
-          />
-        </div>
-
         {/* Events Section */}
-        <div className={`${activeTab === 'events' ? 'block' : 'hidden'} lg:block w-full lg:w-7/12`}>
+        <div className={`${activeTab === 'events' ? 'block' : 'hidden'} lg:block w-full lg:w-7/12 lg:border-r border-gray-200`}>
           <EventsView 
             events={events}
             members={members}
@@ -722,45 +768,75 @@ function App({ auth }) {
             onToggleSlotBatch={toggleSlotBatch}
             onSetSelection={setSelection}
             onBulkClear={handleBulkClear}
+            stickyTop={draftBarHeight + tabBarHeight}
             yamlData={data}
             rosterDiff={hasUncommitted ? rosterDiff : null}
           />
         </div>
+
+        {/* Members Section */}
+        <div className={`${activeTab === 'members' ? 'block' : 'hidden'} lg:block w-full lg:w-5/12 pb-4 lg:pb-0`}>
+          <MembersView 
+            members={members}
+            roles={roles}
+            roleColorMap={roleColorMap}
+            warnings={data?.warnings}
+            searchQuery={searchQuery}
+            memberConstraints={memberConstraints}
+            memberPreferences={memberPreferences}
+          />
+        </div>
       </div>
 
-      {/* Floating action buttons */}
+      {/* Floating action buttons — all standardized to h-12 w-12 */}
       {!showDrawer && (
-        <div className="fixed right-4 z-40 flex flex-col items-end gap-2 bottom-safe sm:right-6">
+        <div className={`fixed right-4 ${zPopover} flex flex-col items-end gap-2 bottom-safe sm:right-6`}>
           {hasUnassignedRoles && permissions.canEditRoster && (
-            <GlassFab
-              onClick={handleGenerateRoster}
-              className="relative h-14 w-14 text-[11px] font-semibold uppercase tracking-wide"
-              title="Generate roster"
+            <HoverCard
+              placement="left"
+              tapToggles={false}
+              onPanelClick={() => setShowAlgorithmModal(true)}
+              panelClassName={`w-72 p-3 text-left text-xs leading-relaxed text-gray-700 cursor-pointer ${glassPanel}`}
+              trigger={
+                <GlassFab
+                  onClick={handleGenerateRoster}
+                  className="relative h-12 w-12 text-[11px] font-semibold uppercase tracking-wide"
+                  title="Generate roster"
+                >
+                  Auto
+                  {unassignedRolesCount > 0 && (
+                    <span className="absolute -top-1 -right-1 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-gray-700 px-1 text-xs font-bold text-white shadow">
+                      {unassignedRolesCount}
+                    </span>
+                  )}
+                </GlassFab>
+              }
             >
-              Auto
-              {unassignedRolesCount > 0 && (
-                <span className="absolute -top-1 -right-1 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-gray-700 px-1 text-xs font-bold text-white shadow">
-                  {unassignedRolesCount}
-                </span>
-              )}
-            </GlassFab>
+              <div className={`mb-1 ${tierSection}`}>How generation works</div>
+              <p className="whitespace-pre-line">{getAlgorithmDescription()}</p>
+              <div className="mt-2 text-[11px] font-medium text-gray-500">Click for full details · generation is undoable</div>
+            </HoverCard>
           )}
           {canUndo && permissions.canUndo && (
             <GlassFab
               onClick={handleUndo}
-              className="h-12 w-12 text-lg"
+              className="h-12 w-12"
               title="Undo (Ctrl/Cmd+Z)"
             >
-              ↶
+              <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 10h11a4 4 0 0 1 0 8h-1M3 10l4-4M3 10l4 4" />
+              </svg>
             </GlassFab>
           )}
           {canRedo && permissions.canUndo && (
             <GlassFab
               onClick={handleRedo}
-              className="h-12 w-12 text-lg"
+              className="h-12 w-12"
               title="Redo (Ctrl/Cmd+Shift+Z)"
             >
-              ↷
+              <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M21 10H10a4 4 0 0 0 0 8h1M21 10l-4-4M21 10l-4 4" />
+              </svg>
             </GlassFab>
           )}
           {permissions.canImport && (
@@ -789,15 +865,22 @@ function App({ auth }) {
       {/* Owner admin panel (production) */}
       <AdminModal open={showAdmin} onClose={() => setShowAdmin(false)} roster={roster} />
 
-      {/* Invalid-swap toast */}
+      {/* Invalid-swap toast. Sits above the floating month selector (which is
+          centered at the very bottom) so the two don't overlap. */}
       {swapNotice && (
-        <div className={`fixed bottom-4 left-1/2 z-50 -translate-x-1/2 rounded-lg px-4 py-2 text-sm shadow-lg ${semanticError}`}>
+        <div className={`fixed bottom-20 left-1/2 ${zToast} -translate-x-1/2 rounded-lg px-4 py-2 text-sm shadow-lg ${semanticError}`}>
           {swapNotice}
+        </div>
+      )}
+      {/* Generation-complete toast (neutral; detail lives in the stats panel) */}
+      {generationNotice && (
+        <div className={`fixed bottom-20 left-1/2 ${zToast} -translate-x-1/2 rounded-lg px-4 py-2 text-sm text-white shadow-lg bg-gray-800/90 backdrop-blur-md`}>
+          {generationNotice}
         </div>
       )}
       {/* Swap confirmation (drag-and-drop rewrites two slots — loss-ful) */}
       {pendingSwap && (
-        <div className={`fixed inset-0 z-50 flex items-center justify-center p-4 ${modalBackdrop}`} onClick={() => setPendingSwap(null)}>
+        <div className={`fixed inset-0 ${zModal} flex items-center justify-center p-4 ${modalBackdrop}`} onClick={() => setPendingSwap(null)}>
           <div className={`w-full max-w-sm p-4 sm:p-6 ${glassModal}`} onClick={e => e.stopPropagation()}>
             <h2 className={headingModal}>{pendingSwap.isMove ? 'Confirm move' : 'Confirm swap'}</h2>
             <div className="mt-4 space-y-2">
@@ -841,7 +924,7 @@ function App({ auth }) {
       )}
       {/* Role-slot removal confirmation (removes an entire role requirement) */}
       {pendingRemoveSlot && (
-        <div className={`fixed inset-0 z-50 flex items-center justify-center p-4 ${modalBackdrop}`} onClick={() => setPendingRemoveSlot(null)}>
+        <div className={`fixed inset-0 ${zModal} flex items-center justify-center p-4 ${modalBackdrop}`} onClick={() => setPendingRemoveSlot(null)}>
           <div className={`w-full max-w-sm p-5 ${glassModal}`} onClick={e => e.stopPropagation()}>
             <p className="text-base font-semibold text-gray-900">{pendingRemoveSlot.prompt}</p>
             <p className="mt-1 text-sm text-gray-600">{pendingRemoveSlot.message}</p>
@@ -866,7 +949,7 @@ function App({ auth }) {
       )}
       {/* Clear-generated confirmation (removes all auto-generated assignments) */}
       {pendingClearGenerated && (
-        <div className={`fixed inset-0 z-50 flex items-center justify-center p-4 ${modalBackdrop}`} onClick={() => setPendingClearGenerated(null)}>
+        <div className={`fixed inset-0 ${zModal} flex items-center justify-center p-4 ${modalBackdrop}`} onClick={() => setPendingClearGenerated(null)}>
           <div className={`w-full max-w-sm p-5 ${glassModal}`} onClick={e => e.stopPropagation()}>
             <p className="text-base font-semibold text-gray-900">{pendingClearGenerated.prompt}</p>
             <p className="mt-1 text-sm text-gray-600">{pendingClearGenerated.message}</p>
@@ -891,7 +974,7 @@ function App({ auth }) {
       )}
       {/* Bulk-clear confirmation (empties multiple selected assignments) */}
       {pendingBulkClear && (
-        <div className={`fixed inset-0 z-50 flex items-center justify-center p-4 ${modalBackdrop}`} onClick={() => setPendingBulkClear(null)}>
+        <div className={`fixed inset-0 ${zModal} flex items-center justify-center p-4 ${modalBackdrop}`} onClick={() => setPendingBulkClear(null)}>
           <div className={`w-full max-w-sm p-5 ${glassModal}`} onClick={e => e.stopPropagation()}>
             <p className="text-base font-semibold text-gray-900">{pendingBulkClear.prompt}</p>
             <p className="mt-1 text-sm text-gray-600">{pendingBulkClear.message}</p>
@@ -914,20 +997,11 @@ function App({ auth }) {
           </div>
         </div>
       )}
-      {/* Algorithm Description Modal */}
+      {/* Algorithm Description Modal (on-demand explainer, opened from the info FAB) */}
       {showAlgorithmModal && (
         <AlgorithmDescriptionModal
           description={getAlgorithmDescription()}
-          onContinue={handleConfirmGeneration}
           onClose={() => setShowAlgorithmModal(false)}
-        />
-      )}
-      {/* Generation Result Modal */}
-      {showGenerationModal && (
-        <GenerationResultModal
-          generationResult={generationResult}
-          members={members}
-          onClose={() => setShowGenerationModal(false)}
         />
       )}
     </div>

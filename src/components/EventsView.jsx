@@ -6,7 +6,7 @@ import RosterSlotPill from './RosterSlotPill'
 import { IssueSummary } from './SharedComponents'
 import { understudySlotRole, isUnderstudyRole, baseRoleOf } from '../utils/understudy'
 import { slotKey } from '../utils/bulkClear'
-import { headingPage, glassMenu, hoverRow, tierSection, semanticError, semanticWarning, glassPanel } from '../utils/statsTheme'
+import { headingPage, glassMenu, hoverRow, tierSection, semanticError, semanticWarning, glassPanel, zInCard, zSticky, zPopover } from '../utils/statsTheme'
 
 /**
  * Copy text to the clipboard, returning true on success.
@@ -65,7 +65,7 @@ function GroupCheckbox({ state, onToggle, title }) {
   )
 }
 
-export default function EventsView({ events, members, memberConstraints, roleColorMap, searchQuery, validationResults, roles, onEditRosterSlot, onSwapRosterSlots, onAddRosterSlot, onRemoveRosterSlot, onClearGenerated, selectMode, selectedSlots, onEnterSelectAt, onExitSelectMode, onToggleSlotSelected, onToggleSlotBatch, onSetSelection, onBulkClear, yamlData, rosterDiff }) {
+export default function EventsView({ events, members, memberConstraints, roleColorMap, searchQuery, validationResults, roles, onEditRosterSlot, onSwapRosterSlots, onAddRosterSlot, onRemoveRosterSlot, onClearGenerated, selectMode, selectedSlots, onEnterSelectAt, onExitSelectMode, onToggleSlotSelected, onToggleSlotBatch, onSetSelection, onBulkClear, stickyTop = 0, yamlData, rosterDiff }) {
   const [expandedEvent, setExpandedEvent] = useState(null)
   const [menuOpen, setMenuOpen] = useState(false)
   const [addRoleFor, setAddRoleFor] = useState(null) // event.date whose add-role picker is open
@@ -461,7 +461,7 @@ export default function EventsView({ events, members, memberConstraints, roleCol
             </button>
 
             {menuOpen && (
-              <div className={`absolute right-0 top-full z-30 mt-1 w-52 overflow-hidden py-1 ${glassMenu}`}>
+              <div className={`absolute right-0 top-full ${zPopover} mt-1 w-52 overflow-hidden py-1 ${glassMenu}`}>
                 {onClearGenerated && (
                   <>
                     <div className={`px-3 py-1 ${tierSection}`}>Roster</div>
@@ -505,7 +505,7 @@ export default function EventsView({ events, members, memberConstraints, roleCol
       {/* Selection toolbar (multi-select mode). Minimal: a count + select-all
           shortcuts scoped to the visible events, Clear, and Done. */}
       {selectMode && (
-        <div className={`sticky top-0 z-30 mb-4 flex flex-wrap items-center gap-x-3 gap-y-2 p-2 ${glassPanel}`}>
+        <div className={`sticky ${zSticky} mb-4 flex flex-wrap items-center gap-x-3 gap-y-2 p-2 ${glassPanel}`} style={{ top: stickyTop }}>
           <span className={tierSection}>{selectedCount} selected</span>
           <div className="flex flex-wrap items-center gap-1 text-xs">
             <button
@@ -599,7 +599,7 @@ export default function EventsView({ events, members, memberConstraints, roleCol
                     : ''
                 
                 return (
-                <div key={eventIdx} className={`relative ${overlayEventKey === eventKey || addRoleFor === event.date ? 'z-40' : ''} ${glassPanel} ${statusStripe} p-3 transition-colors`}>
+                <div key={eventIdx} className={`relative ${overlayEventKey === eventKey || addRoleFor === event.date ? zPopover : ''} ${glassPanel} ${statusStripe} p-3 transition-colors`}>
                   <div className="mb-3">
                     <div className="text-xl font-bold text-gray-900 mb-1 flex items-center gap-2">
                       {selectMode && (eventFilledKeys[event.date]?.length > 0) && (
@@ -680,7 +680,7 @@ export default function EventsView({ events, members, memberConstraints, roleCol
                                 + Role
                               </button>
                               {isOpen && addableRoles.length > 0 && (
-                                <div className={`absolute left-0 top-full z-20 mt-1 max-h-52 w-44 overflow-y-auto ${glassMenu}`}>
+                                <div className={`absolute left-0 top-full ${zInCard} mt-1 max-h-52 w-44 overflow-y-auto ${glassMenu}`}>
                                   {addableRoles.map(role => (
                                     <button
                                       key={role}
@@ -779,7 +779,7 @@ export default function EventsView({ events, members, memberConstraints, roleCol
 
       {/* Floating month selector (2+ months) */}
       {filteredMonths.length > 1 && (
-        <div className="pointer-events-none fixed inset-x-0 z-30 flex justify-center px-4 bottom-safe">
+        <div className={`pointer-events-none fixed inset-x-0 ${zSticky} flex justify-center px-4 bottom-safe`}>
           <div
             ref={selectorRef}
             className="pointer-events-auto flex max-w-[calc(100%-5rem)] gap-1 overflow-x-auto rounded-full border border-gray-200 bg-white/90 p-1 shadow-lg backdrop-blur-md [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"

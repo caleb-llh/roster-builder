@@ -77,6 +77,29 @@ export const glassModal = 'rounded-2xl border border-white/50 bg-white/80 shadow
 /** Standard dimmed, blurred modal backdrop. */
 export const modalBackdrop = 'bg-black/30 backdrop-blur-sm'
 
+// --- Z-index scale (stacking order, low → high) ---
+//
+// A single ladder so overlapping layers don't fight (the bug: an `z-40` issue
+// dropdown was painted UNDER the `z-40` sticky select toolbar). Rule of thumb:
+// something that opens ON TOP of another layer must sit one rung above it.
+//   inCard  (10) — overlays local to a card (a slot picker, a diff badge)
+//   sticky  (30) — pinned chrome: draft bar, mobile tabs, select toolbar,
+//                  month selector, header action menu
+//   popover (40) — dropdowns/pickers that must escape sticky chrome (the
+//                  Events issue dropdown, slot pickers opened from a pill)
+//   toast   (45) — transient toasts (above sticky + popovers, below modals)
+//   modal   (50) — modals, the YAML drawer, and their backdrops (topmost)
+/** Card-local overlay (slot pickers, badges inside a card). */
+export const zInCard = 'z-10'
+/** Pinned/sticky chrome (draft bar, tabs, select toolbar, month selector, menus). */
+export const zSticky = 'z-30'
+/** Dropdowns/pickers that must sit above sticky chrome. */
+export const zPopover = 'z-40'
+/** Transient toasts — above sticky + popovers, below modals. */
+export const zToast = 'z-[45]'
+/** Modals, drawers, and their backdrops (topmost). */
+export const zModal = 'z-50'
+
 // --- Heading tiers (larger page/section titles, still monochrome) ---
 
 /** Page H1 (app title, view titles). Normal-case (it's a proper name/title). */
@@ -125,6 +148,15 @@ export const semanticError = 'bg-red-50/50 backdrop-blur-sm border-l-2 border-re
 
 /** Warning panel/row surface (was `bg-yellow-50 border-yellow-400`). */
 export const semanticWarning = 'bg-amber-50/50 backdrop-blur-sm border-l-2 border-amber-300/70 text-amber-700'
+
+// The pinned "unsaved changes" draft bar is intentionally the ONE saturated
+// surface in the app: it is the highest-urgency chrome ("act now — Save or
+// Discard"), so it uses a solid amber fill rather than the near-glass
+// `semanticWarning` tint. Centralised here so the guardrail + design page can
+// cover it and it isn't re-hand-rolled. Buttons inside it use `btnPrimary` /
+// `btnNeutral` like every other CTA.
+/** Pinned draft/unsaved-changes bar surface (intentional saturated amber). */
+export const draftBar = 'border-b border-amber-300 bg-amber-50/95 backdrop-blur-md'
 
 /** Small error badge/pill (was `bg-red-100 text-red-800 border-red-300`). */
 export const errorChip = 'bg-red-50/70 backdrop-blur-sm text-red-700 border border-red-200/60'

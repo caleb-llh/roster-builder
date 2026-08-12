@@ -8,7 +8,7 @@
  * unambiguous mistakes (copy-pasting a glass token's literal string, or using a
  * banned decorative hue) rather than every raw utility, so it never fights the
  * many legitimate one-off surfaces (hover states, the dark log console, the
- * amber draft bar, the day-pill scroller, etc.).
+ * day-pill scroller, etc.).
  *
  * Two allowlisted files may contain raw strings:
  *   - `statsTheme.js` — it *defines* the tokens.
@@ -25,6 +25,7 @@ import {
   glassMenu,
   glassModal,
   glassFab,
+  draftBar,
 } from './statsTheme'
 
 const here = dirname(fileURLToPath(import.meta.url))
@@ -71,6 +72,7 @@ const BANNED_LITERALS = [
   { value: glassMenu, token: 'glassMenu' },
   { value: glassModal, token: 'glassModal' },
   { value: glassFab, token: 'glassFab' },
+  { value: draftBar, token: 'draftBar' },
 ]
 
 /**

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { modalBackdrop, glassModal, tierSection, semanticError, btnPrimary, monoChip } from '../utils/statsTheme'
+import { modalBackdrop, glassModal, tierSection, semanticError, btnPrimary, monoChip, zModal } from '../utils/statsTheme'
 import { ModalHeader } from './SharedComponents'
 
 /**
@@ -74,7 +74,7 @@ export default function AdminModal({ open, onClose, roster }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div className={`fixed inset-0 ${zModal} flex items-center justify-center p-4`}>
       <div className={`absolute inset-0 ${modalBackdrop}`} onClick={onClose} />
       <div className={`relative z-10 flex max-h-[85vh] w-full max-w-md flex-col overflow-hidden ${glassModal}`}>
         <ModalHeader title="Manage roster" onClose={onClose} />
