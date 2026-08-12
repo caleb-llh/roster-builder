@@ -32,6 +32,10 @@ export default function RosterSlotPill({
   onRemoveSlot,
   onSwap,
   onOpenChange,
+  selectMode = false,
+  selected = false,
+  onToggleSelect,
+  onEnterSelectAt,
 }) {
   const [open, setOpen] = useState(false)
   const [dragOver, setDragOver] = useState(false)
@@ -39,6 +43,8 @@ export default function RosterSlotPill({
   //  { type: 'remove' } or { type: 'replace', id, name }. null when none.
   const [confirming, setConfirming] = useState(null)
   const ref = useRef(null)
+  // Long-press timer: touch-and-hold a filled pill to enter select mode.
+  const longPressRef = useRef(null)
 
   // Notify the parent when this pill's overlay (picker or confirm) opens or
   // closes so the enclosing card can lift its stacking context above siblings.
@@ -58,6 +64,9 @@ export default function RosterSlotPill({
     document.addEventListener('mousedown', onDocClick)
     return () => document.removeEventListener('mousedown', onDocClick)
   }, [open, confirming])
+
+  // Clear any pending long-press timer on unmount.
+  useEffect(() => () => clearTimeout(longPressRef.current), [])
 
   // Candidates: available and not the current occupant.
   const candidates = availableMembers.filter(m => m.available && m.id !== memberId)
@@ -119,6 +128,29 @@ export default function RosterSlotPill({
 
   const canDrag = Boolean(onSwap && memberId)
 
+  // In multi-select mode a FILLED slot becomes a selection toggle: the member
+  // pill no longer opens the picker or drags — clicking it (de)selects the slot
+  // for bulk clear. Empty slots are not selectable (nothing to clear).
+  const selecting = Boolean(selectMode && memberId && onToggleSelect)
+
+  // Enter select-mode gestures on a FILLED pill (only when NOT already in
+  // select mode). Long-press for touch, right-click (contextmenu) for desktop —
+  // both avoid clashing with left-click (picker) and left-drag (swap).
+  const canEnterSelect = Boolean(!selectMode && memberId && onEnterSelectAt)
+
+  const startLongPress = () => {
+    if (!canEnterSelect) return
+    clearTimeout(longPressRef.current)
+    longPressRef.current = setTimeout(() => onEnterSelectAt(), 500)
+  }
+  const cancelLongPress = () => clearTimeout(longPressRef.current)
+
+  const handleContextMenu = (e) => {
+    if (!canEnterSelect) return
+    e.preventDefault()
+    onEnterSelectAt()
+  }
+
   // Inline uncommitted-change marker (draft vs. last saved): just a small
   // colored dot in the corner, so pending edits are visible in place without
   // clutter. Hovering the dot reveals what changed.
@@ -179,16 +211,30 @@ export default function RosterSlotPill({
 
       {memberId ? (
         <span
-          className={`ml-1.5 inline-flex items-center gap-1 rounded-full border bg-white/70 pl-2 pr-1 py-0.5 text-xs text-gray-800 transition-colors ${dragOver ? 'border-gray-500 ring-1 ring-gray-400' : 'border-gray-300'} ${canDrag ? 'cursor-grab active:cursor-grabbing' : ''}`}
-          draggable={canDrag}
-          onDragStart={canDrag ? handleDragStart : undefined}
-          title={canDrag ? 'Drag to another slot to swap' : undefined}
+          className={`ml-1.5 inline-flex items-center gap-1 rounded-full border bg-white/70 pl-2 pr-1 py-0.5 text-xs text-gray-800 transition-colors ${selecting && selected ? 'border-gray-600 ring-1 ring-gray-500' : dragOver ? 'border-gray-500 ring-1 ring-gray-400' : 'border-gray-300'} ${selecting ? 'cursor-pointer' : canDrag ? 'cursor-grab active:cursor-grabbing' : ''}`}
+          draggable={canDrag && !selecting}
+          onDragStart={canDrag && !selecting ? handleDragStart : undefined}
+          onClick={selecting ? (e) => onToggleSelect(e.shiftKey) : undefined}
+          onContextMenu={handleContextMenu}
+          onTouchStart={startLongPress}
+          onTouchEnd={cancelLongPress}
+          onTouchMove={cancelLongPress}
+          title={selecting ? 'Click to select (Shift-click for a range)' : canDrag ? 'Drag to swap · long-press or right-click to select' : undefined}
         >
+          {selecting && (
+            <span
+              className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded border text-[9px] leading-none ${selected ? 'border-gray-700 bg-gray-800 text-white' : 'border-gray-400 bg-white/70 text-transparent'}`}
+              aria-hidden="true"
+            >
+              ✓
+            </span>
+          )}
           <button
             type="button"
-            onClick={() => editable && setOpen(o => !o)}
+            onClick={() => !selecting && editable && setOpen(o => !o)}
             className="max-w-[140px] truncate hover:text-gray-900"
-            title={editable ? 'Replace member' : undefined}
+            title={!selecting && editable ? 'Replace member' : undefined}
+            tabIndex={selecting ? -1 : undefined}
           >
             {memberLabel}
           </button>
@@ -197,7 +243,7 @@ export default function RosterSlotPill({
               gen
             </span>
           )}
-          {editable && (
+          {editable && !selecting && (
             <button
               type="button"
               onClick={handleRemoveClick}

@@ -5,6 +5,7 @@ import { exportToYAML, downloadYAML } from '../utils/dataExport'
 import RosterSlotPill from './RosterSlotPill'
 import { IssueSummary } from './SharedComponents'
 import { understudySlotRole, isUnderstudyRole, baseRoleOf } from '../utils/understudy'
+import { slotKey } from '../utils/bulkClear'
 import { headingPage, glassMenu, hoverRow, tierSection, semanticError, semanticWarning, glassPanel } from '../utils/statsTheme'
 
 /**
@@ -40,7 +41,31 @@ async function copyText(text) {
   }
 }
 
-export default function EventsView({ events, members, memberConstraints, roleColorMap, searchQuery, validationResults, roles, onEditRosterSlot, onSwapRosterSlots, onAddRosterSlot, onRemoveRosterSlot, onClearGenerated, yamlData, rosterDiff }) {
+/**
+ * Tri-state group checkbox for the event-level / month-level select controls.
+ * `state` is 'all' | 'some' | 'none'; clicking calls `onToggle`. Rendered only
+ * in select mode. Monochrome to match the neutral chrome.
+ */
+function GroupCheckbox({ state, onToggle, title }) {
+  return (
+    <button
+      type="button"
+      onClick={(e) => { e.stopPropagation(); onToggle() }}
+      title={title}
+      aria-checked={state === 'all' ? 'true' : state === 'some' ? 'mixed' : 'false'}
+      role="checkbox"
+      className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border text-[10px] leading-none transition-colors touch-manipulation ${
+        state === 'none'
+          ? 'border-gray-400 bg-white/70 text-transparent hover:border-gray-600'
+          : 'border-gray-700 bg-gray-800 text-white'
+      }`}
+    >
+      {state === 'all' ? '✓' : state === 'some' ? '–' : ''}
+    </button>
+  )
+}
+
+export default function EventsView({ events, members, memberConstraints, roleColorMap, searchQuery, validationResults, roles, onEditRosterSlot, onSwapRosterSlots, onAddRosterSlot, onRemoveRosterSlot, onClearGenerated, selectMode, selectedSlots, onEnterSelectAt, onExitSelectMode, onToggleSlotSelected, onToggleSlotBatch, onSetSelection, onBulkClear, yamlData, rosterDiff }) {
   const [expandedEvent, setExpandedEvent] = useState(null)
   const [menuOpen, setMenuOpen] = useState(false)
   const [addRoleFor, setAddRoleFor] = useState(null) // event.date whose add-role picker is open
@@ -264,6 +289,57 @@ export default function EventsView({ events, members, memberConstraints, roleCol
   // Whether any slot carries the auto-generated tag (enables "Remove generated").
   const hasGenerated = (events || []).some(e => e.roster?.some(s => s.isGenerated))
 
+  // Selectable slot keys within the CURRENTLY VISIBLE (filtered) events. Only
+  // filled slots are selectable — a bulk "clear" has nothing to do to an empty
+  // slot. `visibleFilledKeys` is the ORDERED flat list (month → event → slot),
+  // which powers the toolbar's All button and shift-click range selection.
+  // `eventFilledKeys` / `monthFilledKeys` map an event date / month index to its
+  // filled keys, powering the event- and month-level header checkboxes.
+  const visibleFilledKeys = []
+  const visibleGeneratedKeys = []
+  const eventFilledKeys = {} // event.date -> [key]
+  const monthFilledKeys = {} // monthIdx -> [key]
+  filteredMonths.forEach((month, monthIdx) => {
+    monthFilledKeys[monthIdx] = []
+    month.events.forEach(event => {
+      eventFilledKeys[event.date] = []
+      ;(event.roster || []).forEach((slot, idx) => {
+        if (!slot.member_id) return
+        const key = slotKey(event.date, idx)
+        visibleFilledKeys.push(key)
+        if (slot.isGenerated) visibleGeneratedKeys.push(key)
+        eventFilledKeys[event.date].push(key)
+        monthFilledKeys[monthIdx].push(key)
+      })
+    })
+  })
+  const selectedCount = selectedSlots ? selectedSlots.size : 0
+
+  // Anchor for shift-click range selection (index into visibleFilledKeys of the
+  // last plain toggle). A ref so it doesn't trigger re-renders.
+  const rangeAnchorRef = useRef(null)
+
+  // Tri-state for a group of keys: 'all' | 'some' | 'none'.
+  const groupState = (keys) => {
+    if (!keys || keys.length === 0 || !selectedSlots) return 'none'
+    const sel = keys.filter(k => selectedSlots.has(k)).length
+    if (sel === 0) return 'none'
+    return sel === keys.length ? 'all' : 'some'
+  }
+
+  // Toggle a single slot. Shift+click extends a contiguous range from the anchor
+  // over the visible order; a plain click toggles and resets the anchor.
+  const handleSlotToggle = (key, shiftKey) => {
+    const idx = visibleFilledKeys.indexOf(key)
+    if (shiftKey && rangeAnchorRef.current != null && idx !== -1) {
+      const [lo, hi] = [rangeAnchorRef.current, idx].sort((a, b) => a - b)
+      onSetSelection(visibleFilledKeys.slice(lo, hi + 1))
+      return
+    }
+    rangeAnchorRef.current = idx === -1 ? null : idx
+    onToggleSlotSelected(key)
+  }
+
   // Roles offered by the "+ Role" picker: every base role plus its understudy
   // variant (understudy slots follow the "X-understudy" suffix convention and
   // aren't part of the base catalog).
@@ -425,7 +501,59 @@ export default function EventsView({ events, members, memberConstraints, roleCol
           </div>
         </div>
       </div>
-      
+
+      {/* Selection toolbar (multi-select mode). Minimal: a count + select-all
+          shortcuts scoped to the visible events, Clear, and Done. */}
+      {selectMode && (
+        <div className={`sticky top-0 z-30 mb-4 flex flex-wrap items-center gap-x-3 gap-y-2 p-2 ${glassPanel}`}>
+          <span className={tierSection}>{selectedCount} selected</span>
+          <div className="flex flex-wrap items-center gap-1 text-xs">
+            <button
+              type="button"
+              onClick={() => onSetSelection(visibleFilledKeys)}
+              disabled={visibleFilledKeys.length === 0}
+              className={`rounded px-2 py-1 ${visibleFilledKeys.length === 0 ? 'text-gray-300' : `text-gray-700 ${hoverRow}`}`}
+            >
+              All ({visibleFilledKeys.length})
+            </button>
+            {visibleGeneratedKeys.length > 0 && (
+              <button
+                type="button"
+                onClick={() => onSetSelection(visibleGeneratedKeys)}
+                className={`rounded px-2 py-1 text-gray-700 ${hoverRow}`}
+              >
+                Generated ({visibleGeneratedKeys.length})
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => onSetSelection([])}
+              disabled={selectedCount === 0}
+              className={`rounded px-2 py-1 ${selectedCount === 0 ? 'text-gray-300' : `text-gray-700 ${hoverRow}`}`}
+            >
+              Unselect all
+            </button>
+          </div>
+          <div className="ml-auto flex items-center gap-2">
+            <button
+              type="button"
+              onClick={onBulkClear}
+              disabled={selectedCount === 0}
+              className={`rounded-md px-3 py-1.5 text-xs font-medium ${selectedCount === 0 ? 'text-gray-300' : 'text-red-700 hover:bg-red-50'}`}
+            >
+              Clear selected assignments
+            </button>
+            <button
+              type="button"
+              onClick={onExitSelectMode}
+              className={`rounded-md px-3 py-1.5 text-xs font-medium text-gray-600 ${hoverRow}`}
+            >
+              Done
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Card View */}
       <div className="space-y-8">
           {filteredMonths.map((month, monthIdx) => (
@@ -435,7 +563,14 @@ export default function EventsView({ events, members, memberConstraints, roleCol
               ref={el => { monthRefs.current[month.key] = el }}
               className="scroll-mt-16"
             >
-              <h3 className="text-xl font-bold text-gray-900 mb-4 pb-2 border-b-2 border-gray-400">
+              <h3 className="text-xl font-bold text-gray-900 mb-4 pb-2 border-b-2 border-gray-400 flex items-center gap-2">
+                {selectMode && (monthFilledKeys[monthIdx]?.length > 0) && (
+                  <GroupCheckbox
+                    state={groupState(monthFilledKeys[monthIdx])}
+                    onToggle={() => onToggleSlotBatch(monthFilledKeys[monthIdx])}
+                    title="Select all assignments this month"
+                  />
+                )}
                 {month.monthName}
               </h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -467,6 +602,13 @@ export default function EventsView({ events, members, memberConstraints, roleCol
                 <div key={eventIdx} className={`relative ${overlayEventKey === eventKey || addRoleFor === event.date ? 'z-40' : ''} ${glassPanel} ${statusStripe} p-3 transition-colors`}>
                   <div className="mb-3">
                     <div className="text-xl font-bold text-gray-900 mb-1 flex items-center gap-2">
+                      {selectMode && (eventFilledKeys[event.date]?.length > 0) && (
+                        <GroupCheckbox
+                          state={groupState(eventFilledKeys[event.date])}
+                          onToggle={() => onToggleSlotBatch(eventFilledKeys[event.date])}
+                          title="Select all assignments in this event"
+                        />
+                      )}
                       {formatDate(event.date)}
                       <span className={`mx-1 text-xs font-semibold uppercase tracking-wide transition-colors ${dayLabelColor}`}>
                           {event.day_of_week}
@@ -513,6 +655,10 @@ export default function EventsView({ events, members, memberConstraints, roleCol
                               onRemoveSlot={onRemoveRosterSlot ? () => onRemoveRosterSlot(event.date, idx) : undefined}
                               onSwap={onSwapRosterSlots}
                               onOpenChange={(isOpen) => setOverlayEventKey(prev => isOpen ? eventKey : (prev === eventKey ? null : prev))}
+                              selectMode={selectMode}
+                              selected={selectedSlots?.has(slotKey(event.date, idx))}
+                              onToggleSelect={(shiftKey) => handleSlotToggle(slotKey(event.date, idx), shiftKey)}
+                              onEnterSelectAt={onEnterSelectAt ? () => onEnterSelectAt(slotKey(event.date, idx)) : undefined}
                             />
                           )
                         })}

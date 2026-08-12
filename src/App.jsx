@@ -7,6 +7,7 @@ import { getDerivedState } from './utils/derivedState'
 import { computeRosterDiff } from './utils/rosterDiff'
 import { useRosterData } from './hooks/useRosterData'
 import { canSwapRosterSlots } from './utils/constraintsUtils'
+import { buildBulkClear } from './utils/bulkClear'
 import { getActiveConstraints, getActivePreferences, getConstraintDescription, getPreferenceDescription, MEMBER_PREF_FIELDS } from './schema/rosterSchema'
 import { ErrorDisplay, GlassFab } from './components/SharedComponents'
 import MembersView from './components/MembersView'
@@ -33,6 +34,9 @@ function App({ auth }) {
   const [showChanges, setShowChanges] = useState(false) // expand the uncommitted-changes review list
   const [pendingRemoveSlot, setPendingRemoveSlot] = useState(null) // { nextEvents, prompt, message } awaiting confirmation
   const [pendingClearGenerated, setPendingClearGenerated] = useState(null) // { nextEvents, count, prompt, message } awaiting confirmation
+  const [selectMode, setSelectMode] = useState(false) // Events multi-select mode
+  const [selectedSlots, setSelectedSlots] = useState(() => new Set()) // set of `date#roleIndex` keys
+  const [pendingBulkClear, setPendingBulkClear] = useState(null) // { nextEvents, count, prompt, message } awaiting confirmation
 
   // Custom hook for all data management (consolidated state)
   const roster = useRosterData()
@@ -446,6 +450,77 @@ function App({ auth }) {
     setPendingClearGenerated(null)
   }
 
+  // --- Events multi-select (bulk clear) ---
+  //
+  // "Clear" empties the member from each selected slot but keeps the role slot
+  // (non-destructive, mirrors handleEditRosterSlot(...,null)). The whole set is
+  // applied in one updateEvents call so it is a single draft/undo step.
+
+  // Toggle one slot key (`date#roleIndex`) in the selection.
+  const toggleSlotSelected = (key) => {
+    setSelectedSlots(prev => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
+  }
+
+  // Replace the whole selection (used by the toolbar's All / filled / generated
+  // / None buttons, which compute keys from the currently-visible events).
+  const setSelection = (keys) => setSelectedSlots(new Set(keys))
+
+  // Enter select mode from a long-press / right-click on a filled pill, with
+  // that slot pre-selected. This is the primary entry point (no menu needed).
+  const enterSelectAt = (key) => {
+    setSelectMode(true)
+    setSelectedSlots(new Set(key ? [key] : []))
+  }
+
+  // Add or remove a batch of keys at once (event-level / month-level / range
+  // toggles). When every key in the batch is already selected we deselect them
+  // all; otherwise we add them all — a predictable tri-state group toggle.
+  const toggleSlotBatch = (keys) => {
+    setSelectedSlots(prev => {
+      const next = new Set(prev)
+      const allSelected = keys.length > 0 && keys.every(k => next.has(k))
+      if (allSelected) keys.forEach(k => next.delete(k))
+      else keys.forEach(k => next.add(k))
+      return next
+    })
+  }
+
+  // Leave select mode and drop any pending selection.
+  const exitSelectMode = () => {
+    setSelectMode(false)
+    setSelectedSlots(new Set())
+  }
+
+  // Stage the bulk clear for confirmation (only slots that actually hold a
+  // member are counted; empty/unknown keys are ignored by buildBulkClear).
+  const handleBulkClear = () => {
+    const { nextEvents, count } = buildBulkClear(events, selectedSlots)
+    if (count === 0) return
+    setPendingBulkClear({
+      nextEvents,
+      count,
+      prompt: `Clear ${count} assignment${count > 1 ? 's' : ''}?`,
+      message: 'Empties the selected assignments, leaving their role slots in place to re-fill. Nothing is deleted.',
+    })
+  }
+
+  // Apply the staged bulk clear after the user confirms.
+  const confirmBulkClear = () => {
+    if (!pendingBulkClear) return
+    updateEvents(pendingBulkClear.nextEvents)
+    logAction({
+      level: 'info', category: 'delete', group: 'manual',
+      message: `Cleared ${pendingBulkClear.count} assignment${pendingBulkClear.count > 1 ? 's' : ''}`,
+    })
+    setPendingBulkClear(null)
+    exitSelectMode()
+  }
+
   // Check if there are unassigned roles
   const hasUnassignedRoles = events.some(event => 
     event.roster && event.roster.some(r => !r.member_id)
@@ -639,6 +714,14 @@ function App({ auth }) {
             onAddRosterSlot={permissions.canEditRoster ? handleAddRosterSlot : undefined}
             onRemoveRosterSlot={permissions.canEditRoster ? handleRemoveRosterSlot : undefined}
             onClearGenerated={permissions.canEditRoster ? handleClearGenerated : undefined}
+            selectMode={permissions.canEditRoster ? selectMode : false}
+            selectedSlots={selectedSlots}
+            onEnterSelectAt={permissions.canEditRoster ? enterSelectAt : undefined}
+            onExitSelectMode={exitSelectMode}
+            onToggleSlotSelected={toggleSlotSelected}
+            onToggleSlotBatch={toggleSlotBatch}
+            onSetSelection={setSelection}
+            onBulkClear={handleBulkClear}
             yamlData={data}
             rosterDiff={hasUncommitted ? rosterDiff : null}
           />
@@ -801,6 +884,31 @@ function App({ auth }) {
                 className={`px-4 py-2 text-sm ${btnDanger} touch-manipulation`}
               >
                 Remove
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Bulk-clear confirmation (empties multiple selected assignments) */}
+      {pendingBulkClear && (
+        <div className={`fixed inset-0 z-50 flex items-center justify-center p-4 ${modalBackdrop}`} onClick={() => setPendingBulkClear(null)}>
+          <div className={`w-full max-w-sm p-5 ${glassModal}`} onClick={e => e.stopPropagation()}>
+            <p className="text-base font-semibold text-gray-900">{pendingBulkClear.prompt}</p>
+            <p className="mt-1 text-sm text-gray-600">{pendingBulkClear.message}</p>
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setPendingBulkClear(null)}
+                className="rounded-lg px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-500/10 touch-manipulation"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmBulkClear}
+                className={`px-4 py-2 text-sm ${btnDanger} touch-manipulation`}
+              >
+                Clear
               </button>
             </div>
           </div>
