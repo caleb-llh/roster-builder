@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { glassPopup, glassArrow } from './statsTheme'
 
 /**
  * Calculate shift distribution from generation result
@@ -128,7 +129,7 @@ export function BellCurveChart({ sortedDistribution, maxMemberCount, members = [
               {/* Tooltip with member names — light translucent glass, matching
                   the roster-stats theme */}
               {isHovered && memberIds && memberIds.length > 0 && (
-                <div className="absolute bottom-full mb-2 rounded-lg border border-white/60 bg-white/80 py-2 px-3 text-xs text-slate-700 shadow-lg backdrop-blur-md z-50 whitespace-nowrap max-w-xs">
+                <div className={`absolute bottom-full mb-2 py-2 px-3 text-xs z-50 whitespace-nowrap max-w-xs ${glassPopup}`}>
                   <div className="font-semibold mb-1">
                     {memberCount} member{memberCount > 1 ? 's' : ''} with {shiftCount} shift{shiftCount > 1 ? 's' : ''}:
                   </div>
@@ -138,7 +139,7 @@ export function BellCurveChart({ sortedDistribution, maxMemberCount, members = [
                     ))}
                   </div>
                   {/* Arrow */}
-                  <div className="absolute left-1/2 top-full h-2 w-2 -translate-x-1/2 -translate-y-1/2 rotate-45 border-b border-r border-white/60 bg-white/80"></div>
+                  <div className={`absolute left-1/2 top-full h-2 w-2 -translate-x-1/2 -translate-y-1/2 ${glassArrow}`}></div>
                 </div>
               )}
             </div>

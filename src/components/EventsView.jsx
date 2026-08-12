@@ -3,7 +3,9 @@ import { getAvailableMembersForEvent } from '../utils/constraintsUtils'
 import { getCardColorForDay, formatDate } from '../utils/colorUtils'
 import { exportToYAML, downloadYAML } from '../utils/dataExport'
 import RosterSlotPill from './RosterSlotPill'
+import { IssueSummary } from './SharedComponents'
 import { understudySlotRole, isUnderstudyRole, baseRoleOf } from '../utils/understudy'
+import { headingPage, glassMenu, hoverRow, tierSection, semanticError, semanticWarning, glassPanel } from '../utils/statsTheme'
 
 /**
  * Copy text to the clipboard, returning true on success.
@@ -208,6 +210,13 @@ export default function EventsView({ events, members, memberConstraints, roleCol
   const totalErrors = Object.values(validationResults || {}).reduce((sum, v) => sum + v.errors.length, 0)
   const totalWarnings = Object.values(validationResults || {}).reduce((sum, v) => sum + v.warnings.length, 0)
 
+  // Flatten per-event issues (date-tagged) for the details dropdown.
+  const issueDetails = Object.entries(validationResults || {})
+    .flatMap(([date, v]) => [
+      ...v.errors.map(msg => ({ label: formatDate(date), msg, level: 'error' })),
+      ...v.warnings.map(msg => ({ label: formatDate(date), msg, level: 'warning' })),
+    ])
+
   // Use roles from builder config (already ordered)
   const allRoles = roles || []
 
@@ -358,7 +367,10 @@ export default function EventsView({ events, members, memberConstraints, roleCol
     <div className="p-4 sm:p-6">
       <div className="mb-4 sm:mb-6">
         <div className="flex items-center justify-between gap-2">
-          <h2 className="text-xl sm:text-2xl font-bold text-gray-900">Events</h2>
+          <div className="flex items-center gap-3">
+            <h2 className={headingPage}>Events</h2>
+            <IssueSummary errorCount={totalErrors} warningCount={totalWarnings} items={issueDetails} />
+          </div>
 
           {/* Actions menu */}
           <div className="relative" ref={menuRef}>
@@ -373,40 +385,40 @@ export default function EventsView({ events, members, memberConstraints, roleCol
             </button>
 
             {menuOpen && (
-              <div className="absolute right-0 top-full z-30 mt-1 w-52 overflow-hidden rounded-lg border border-gray-200 bg-white py-1 shadow-lg">
+              <div className={`absolute right-0 top-full z-30 mt-1 w-52 overflow-hidden py-1 ${glassMenu}`}>
                 {onClearGenerated && (
                   <>
-                    <div className="px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-gray-400">Roster</div>
+                    <div className={`px-3 py-1 ${tierSection}`}>Roster</div>
                     <button
                       onClick={() => { onClearGenerated(); setMenuOpen(false) }}
                       disabled={!hasGenerated}
                       className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm ${hasGenerated ? 'text-red-700 hover:bg-red-50' : 'cursor-default text-gray-300'}`}
                       title={hasGenerated ? 'Remove all auto-generated assignments' : 'No generated assignments'}
                     >
-                      🧹 Remove generated
+                      Remove generated
                     </button>
-                    <div className="my-1 border-t border-gray-100" />
+                    <div className="my-1 border-t border-gray-200/60" />
                   </>
                 )}
 
-                <div className="px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-gray-400">Export</div>
+                <div className={`px-3 py-1 ${tierSection}`}>Export</div>
                 <button
                   onClick={() => { copyToClipboard(); setMenuOpen(false) }}
-                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-gray-700 hover:bg-blue-50"
+                  className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-gray-700 ${hoverRow}`}
                 >
-                  📋 Copy to Excel
+                  Copy to Excel
                 </button>
                 <button
                   onClick={() => { exportToCSV(); setMenuOpen(false) }}
-                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-gray-700 hover:bg-blue-50"
+                  className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-gray-700 ${hoverRow}`}
                 >
-                  💾 Export CSV
+                  Export CSV
                 </button>
                 <button
                   onClick={() => { exportYAML(); setMenuOpen(false) }}
-                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-gray-700 hover:bg-blue-50"
+                  className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-gray-700 ${hoverRow}`}
                 >
-                  📄 Export YAML
+                  Export YAML
                 </button>
               </div>
             )}
@@ -414,31 +426,6 @@ export default function EventsView({ events, members, memberConstraints, roleCol
         </div>
       </div>
       
-      {/* Validation Summary */}
-      {(totalErrors > 0 || totalWarnings > 0) && (
-        <div className="mb-6 bg-white/60 backdrop-blur-md rounded-lg shadow-lg border border-white/30 p-4">
-          <h3 className="text-sm font-semibold text-gray-800 mb-2">Assignment Validation Summary</h3>
-          <div className="flex gap-4">
-            {totalErrors > 0 && (
-              <div className="flex items-center gap-2 text-sm">
-                <span className="px-3 py-1 bg-red-100 text-red-800 font-semibold rounded border border-red-300">
-                  ❌ {totalErrors} Error{totalErrors > 1 ? 's' : ''}
-                </span>
-                <span className="text-gray-600">Constraint violations detected</span>
-              </div>
-            )}
-            {totalWarnings > 0 && (
-              <div className="flex items-center gap-2 text-sm">
-                <span className="px-3 py-1 bg-yellow-100 text-yellow-800 font-semibold rounded border border-yellow-300">
-                  ⚠️ {totalWarnings} Warning{totalWarnings > 1 ? 's' : ''}
-                </span>
-                <span className="text-gray-600">Preference violations detected</span>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-        
       {/* Card View */}
       <div className="space-y-8">
           {filteredMonths.map((month, monthIdx) => (
@@ -462,17 +449,26 @@ export default function EventsView({ events, members, memberConstraints, roleCol
                 const hasErrors = validation.errors.length > 0
                 const hasWarnings = validation.warnings.length > 0
                 
-                // Get day of week (0 = Sunday, 6 = Saturday) and corresponding color
+                // Day-of-week cue: cards stay a neutral monochrome glass (like
+                // the roster stats panel). The weekday is distinguished only by
+                // a faint accent hue on the DAY LABEL text — not a border. The
+                // coloured LEFT border is reserved for status: a slightly
+                // thicker one-sided stripe appears only for errors/warnings.
                 const eventDate = new Date(event.date)
                 const dayOfWeek = eventDate.getDay()
-                const cardBgClass = getCardColorForDay(dayOfWeek)
+                const dayLabelColor = getCardColorForDay(dayOfWeek)
+                const statusStripe = hasErrors
+                  ? 'border-l-4 border-l-red-400'
+                  : hasWarnings
+                    ? 'border-l-4 border-l-amber-400'
+                    : ''
                 
                 return (
-                <div key={eventIdx} className={`relative ${overlayEventKey === eventKey || addRoleFor === event.date ? 'z-40' : ''} ${cardBgClass} backdrop-blur-md rounded-lg shadow-lg border border-white/30 p-3 transition-all ${hasErrors ? 'ring-2 ring-red-500' : hasWarnings ? 'ring-2 ring-yellow-500' : ''}`}>
+                <div key={eventIdx} className={`relative ${overlayEventKey === eventKey || addRoleFor === event.date ? 'z-40' : ''} ${glassPanel} ${statusStripe} p-3 transition-colors`}>
                   <div className="mb-3">
                     <div className="text-xl font-bold text-gray-900 mb-1 flex items-center gap-2">
                       {formatDate(event.date)}
-                      <span className="mx-1 px-2 py-0.5 bg-blue-100/60 text-blue-800 text-xs rounded">
+                      <span className={`mx-1 text-xs font-semibold uppercase tracking-wide transition-colors ${dayLabelColor}`}>
                           {event.day_of_week}
                       </span>
                     </div>
@@ -488,7 +484,7 @@ export default function EventsView({ events, members, memberConstraints, roleCol
                   
                   {(event.roster?.length > 0 || onAddRosterSlot) && (
                     <div className="mb-2">
-                      <div className="text-xs font-semibold text-gray-700 mb-1">Roster:</div>
+                      <div className={`mb-1 ${tierSection}`}>Roster</div>
                       <div className="flex flex-col gap-1.5">
                         {(event.roster || []).map((assignment, idx) => {
                           // Members already assigned in this event (exclude from
@@ -532,21 +528,21 @@ export default function EventsView({ events, members, memberConstraints, roleCol
                                 type="button"
                                 onClick={() => setAddRoleFor(isOpen ? null : event.date)}
                                 disabled={addableRoles.length === 0}
-                                className={`inline-flex w-fit items-center rounded-full border border-dashed px-2 py-0.5 text-xs transition-colors touch-manipulation ${addableRoles.length === 0 ? 'cursor-default border-gray-300 text-gray-300' : 'border-gray-400 bg-white/40 text-gray-500 hover:border-blue-400 hover:text-blue-600'}`}
+                                className={`inline-flex w-fit items-center rounded-full border border-dashed px-2 py-0.5 text-xs transition-colors touch-manipulation ${addableRoles.length === 0 ? 'cursor-default border-gray-300 text-gray-300' : 'border-gray-400 bg-white/40 text-gray-500 hover:border-gray-600 hover:text-gray-800'}`}
                                 title={addableRoles.length === 0 ? 'All roles already added' : 'Add a role to this event'}
                               >
                                 + Role
                               </button>
                               {isOpen && addableRoles.length > 0 && (
-                                <div className="absolute left-0 top-full z-20 mt-1 max-h-52 w-44 overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-lg">
+                                <div className={`absolute left-0 top-full z-20 mt-1 max-h-52 w-44 overflow-y-auto ${glassMenu}`}>
                                   {addableRoles.map(role => (
                                     <button
                                       key={role}
                                       type="button"
                                       onClick={() => { onAddRosterSlot(event.date, role); setAddRoleFor(null) }}
-                                      className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-gray-700 hover:bg-blue-50"
+                                      className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-gray-700 ${hoverRow}`}
                                     >
-                                      <span className={`px-1.5 py-0.5 rounded font-medium ${roleColor(role)}`}>{role}</span>
+                                      <span className={`font-medium ${roleColor(role)}`}>{role}</span>
                                     </button>
                                   ))}
                                 </div>
@@ -570,7 +566,7 @@ export default function EventsView({ events, members, memberConstraints, roleCol
                       <div className="mt-2 pt-2 border-t border-gray-200 space-y-2">
                         {Object.entries(availabilityData).map(([role, memberList]) => (
                           <div key={role} className="text-xs">
-                            <div className={`font-semibold mb-1 px-1.5 py-0.5 rounded inline-block ${roleColorMap[role]}`}>
+                            <div className={`font-semibold mb-1 inline-block ${roleColorMap[role]}`}>
                               {role}
                             </div>
                             <div className="ml-2 space-y-0.5">
@@ -582,14 +578,14 @@ export default function EventsView({ events, members, memberConstraints, roleCol
                                     key={member.id} 
                                     className={`flex items-center gap-1 ${
                                       member.available 
-                                        ? 'text-green-700' 
+                                        ? 'text-gray-700' 
                                         : 'text-red-600 line-through'
                                     }`}
                                   >
                                     <span>{member.available ? '✓' : '✗'}</span>
                                     <span>{member.name}</span>
                                     {member.assigned && (
-                                      <span className="ml-auto text-blue-600 font-semibold">★</span>
+                                      <span className="ml-auto text-gray-700 font-semibold">★</span>
                                     )}
                                   </div>
                                 ))
@@ -605,21 +601,21 @@ export default function EventsView({ events, members, memberConstraints, roleCol
                   {(hasErrors || hasWarnings) && (
                     <div className="mt-2 pt-2 border-t border-gray-300 space-y-1">
                       {validation.errors.map((error, idx) => (
-                        <div key={`error-${idx}`} className="text-xs text-red-700 bg-red-50/80 px-2 py-1.5 rounded border border-red-200/60">
-                          <span className="font-semibold">❌ Error:</span> {error}
+                        <div key={`error-${idx}`} className={`text-xs px-2 py-1.5 rounded ${semanticError}`}>
+                          <span className="font-semibold">Error:</span> {error}
                         </div>
                       ))}
                       {validation.warnings.map((warning, idx) => (
-                        <div key={`warning-${idx}`} className="text-xs text-yellow-800 bg-yellow-50/80 px-2 py-1.5 rounded border border-yellow-200/60">
-                          <span className="font-semibold">⚠️ Warning:</span> {warning}
+                        <div key={`warning-${idx}`} className={`text-xs px-2 py-1.5 rounded ${semanticWarning}`}>
+                          <span className="font-semibold">Warning:</span> {warning}
                         </div>
                       ))}
                     </div>
                   )}
                   
                   {event.reminder && (
-                    <div className="mt-2 text-xs text-blue-700 bg-blue-50/60 px-2 py-1.5 rounded border border-blue-200/40">
-                      ℹ️ {event.reminder}
+                    <div className="mt-2 text-xs text-gray-600 bg-gray-100/70 px-2 py-1.5 rounded border border-gray-200/60">
+                      {event.reminder}
                     </div>
                   )}
                 </div>

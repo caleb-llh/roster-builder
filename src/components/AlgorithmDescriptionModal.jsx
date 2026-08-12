@@ -1,3 +1,5 @@
+import { modalBackdrop, glassModal, headingModal, glassCard, btnPrimary, btnNeutral } from '../utils/statsTheme'
+
 export default function AlgorithmDescriptionModal({ description, onContinue, onClose }) {
   // Parse the description to extract sections
   const lines = description.split('\n')
@@ -24,14 +26,13 @@ export default function AlgorithmDescriptionModal({ description, onContinue, onC
   if (currentSection) sections.push(currentSection)
 
   return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-2 sm:p-4">
-      <div className="bg-white rounded-xl shadow-2xl max-w-3xl w-full max-h-[90vh] sm:max-h-[85vh] overflow-hidden flex flex-col">
+    <div className={`fixed inset-0 ${modalBackdrop} flex items-center justify-center z-50 p-2 sm:p-4`}>
+      <div className={`${glassModal} max-w-3xl w-full max-h-[90vh] sm:max-h-[85vh] overflow-hidden flex flex-col`}>
         {/* Header */}
-        <div className="px-4 sm:px-6 py-4 sm:py-5 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-indigo-50">
+        <div className="px-4 sm:px-6 py-4 sm:py-5 border-b border-gray-200 bg-white/40">
           <div className="flex items-center justify-between">
             <div className="flex-1 mr-2">
-              <h2 className="text-lg sm:text-2xl font-bold text-gray-900 flex items-center gap-2">
-                <span className="text-2xl sm:text-3xl">🤖</span>
+              <h2 className={`${headingModal} text-lg sm:text-2xl flex items-center gap-2`}>
                 <span className="leading-tight">How the Roster Generator Works</span>
               </h2>
               <p className="text-xs sm:text-sm text-gray-600 mt-1">{introLine}</p>
@@ -49,7 +50,7 @@ export default function AlgorithmDescriptionModal({ description, onContinue, onC
         <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-4 sm:py-5">
           <div className="space-y-4 sm:space-y-5">
             {sections.map((section, idx) => (
-              <div key={idx} className="bg-gradient-to-br from-gray-50 to-gray-100/50 rounded-lg sm:rounded-xl p-4 sm:p-5 border border-gray-200/60 shadow-sm">
+              <div key={idx} className={`${glassCard} p-4 sm:p-5`}>
                 <div className="flex items-start gap-2 sm:gap-3">
                   <span className="text-xl sm:text-2xl flex-shrink-0">{section.icon}</span>
                   <div className="flex-1 min-w-0">
@@ -57,7 +58,7 @@ export default function AlgorithmDescriptionModal({ description, onContinue, onC
                     <ul className="space-y-2 sm:space-y-2.5">
                       {section.items.map((item, itemIdx) => (
                         <li key={itemIdx} className="flex items-start gap-2 sm:gap-2.5 text-gray-700">
-                          <span className="text-blue-500 font-bold mt-0.5 flex-shrink-0">•</span>
+                          <span className="text-gray-500 font-bold mt-0.5 flex-shrink-0">•</span>
                           <span className="text-xs sm:text-sm leading-relaxed">{item}</span>
                         </li>
                       ))}
@@ -68,26 +69,25 @@ export default function AlgorithmDescriptionModal({ description, onContinue, onC
             ))}
 
             {/* How it works summary */}
-            <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg sm:rounded-xl p-4 sm:p-5 border border-blue-200/60">
+            <div className={`${glassCard} p-4 sm:p-5`}>
               <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2 text-sm sm:text-base">
-                <span className="text-lg sm:text-xl">💡</span>
                 What happens next:
               </h3>
               <ul className="space-y-2 text-xs sm:text-sm text-gray-700">
                 <li className="flex items-start gap-2">
-                  <span className="text-blue-500 font-bold mt-0.5 flex-shrink-0">1.</span>
+                  <span className="text-gray-500 font-bold mt-0.5 flex-shrink-0">1.</span>
                   <span>The system will find the best match for each open slot</span>
                 </li>
                 <li className="flex items-start gap-2">
-                  <span className="text-blue-500 font-bold mt-0.5 flex-shrink-0">2.</span>
+                  <span className="text-gray-500 font-bold mt-0.5 flex-shrink-0">2.</span>
                   <span>All rules will be strictly followed</span>
                 </li>
                 <li className="flex items-start gap-2">
-                  <span className="text-blue-500 font-bold mt-0.5 flex-shrink-0">3.</span>
+                  <span className="text-gray-500 font-bold mt-0.5 flex-shrink-0">3.</span>
                   <span>Goals will be optimized as best as possible</span>
                 </li>
                 <li className="flex items-start gap-2">
-                  <span className="text-blue-500 font-bold mt-0.5 flex-shrink-0">4.</span>
+                  <span className="text-gray-500 font-bold mt-0.5 flex-shrink-0">4.</span>
                   <span>You'll see the results and can undo if needed</span>
                 </li>
               </ul>
@@ -101,13 +101,13 @@ export default function AlgorithmDescriptionModal({ description, onContinue, onC
           <div className="flex items-center gap-2 sm:gap-3">
             <button
               onClick={onClose}
-              className="flex-1 sm:flex-none px-4 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 active:bg-gray-100 transition-colors touch-manipulation min-h-[44px]"
+              className={`${btnNeutral} flex-1 sm:flex-none px-4 py-2.5 text-sm active:bg-gray-100 touch-manipulation min-h-[44px]`}
             >
               Cancel
             </button>
             <button
               onClick={onContinue}
-              className="flex-1 sm:flex-none px-4 sm:px-6 py-2.5 text-sm font-bold text-white bg-gradient-to-r from-blue-500 to-blue-600 rounded-lg shadow-md hover:shadow-lg hover:from-blue-600 hover:to-blue-700 active:scale-95 transition-all flex items-center justify-center gap-2 touch-manipulation min-h-[44px]"
+              className={`flex-1 sm:flex-none px-4 sm:px-6 py-2.5 text-sm shadow-md hover:shadow-lg active:scale-95 flex items-center justify-center gap-2 touch-manipulation min-h-[44px] ${btnPrimary}`}
             >
               <span>Continue & Generate</span>
               <span>→</span>

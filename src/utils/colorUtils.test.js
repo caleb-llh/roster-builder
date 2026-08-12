@@ -14,9 +14,9 @@ describe('colorUtils', () => {
       expect(COLOR_PALETTE).toHaveLength(10)
     })
 
-    it('should have valid Tailwind classes', () => {
+    it('should have valid Tailwind text-colour classes', () => {
       COLOR_PALETTE.forEach(color => {
-        expect(color).toMatch(/^bg-\w+-\d+\/\d+ text-\w+-\d+$/)
+        expect(color).toMatch(/^text-\w+-\d+$/)
       })
     })
   })

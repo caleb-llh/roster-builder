@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import QualityMetrics from './QualityMetrics'
 import { formatEntry } from '../utils/rosterGenerator/actionLog'
+import { tierTitle, tierLabel, tierSection, tierUnit, helperText, glassPanel, glassCard, semanticError, monoChip } from '../utils/statsTheme'
 
 const CATEGORY_LABEL = {
   generation: 'gen',
@@ -12,12 +13,12 @@ const CATEGORY_LABEL = {
 }
 
 const CATEGORY_STYLE = {
-  generation: 'bg-blue-100 text-blue-700',
-  swap: 'bg-purple-100 text-purple-700',
+  generation: monoChip,
+  swap: monoChip,
   update: 'bg-amber-100 text-amber-700',
   replace: 'bg-amber-100 text-amber-700',
-  delete: 'bg-red-100 text-red-700',
-  insert: 'bg-green-100 text-green-700',
+  delete: 'bg-rose-100 text-rose-700',
+  insert: 'bg-emerald-100 text-emerald-700',
 }
 
 export default function RosterStatsPanel({ stats, generationResult, members, actionLog = [] }) {
@@ -30,12 +31,12 @@ export default function RosterStatsPanel({ stats, generationResult, members, act
   const { totalSlots, totalEvents, monthCount, avgSlotsPerEvent, avgSlotsPerMonth, avgSlotsPerMember } = stats
 
   return (
-    <div className="bg-white/40 backdrop-blur-md border border-white/30 rounded-lg shadow-lg p-4 mb-6">
+    <div className={`${glassPanel} p-4 mb-6`}>
       <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm font-semibold uppercase tracking-[0.2em] text-gray-800">Roster Statistics</h3>
+        <h3 className={tierTitle}>Roster Statistics</h3>
         <button
           onClick={() => setShowDetails(!showDetails)}
-          className="text-[11px] font-medium uppercase tracking-wider text-slate-500 hover:text-slate-800"
+          className={`${tierLabel} hover:text-gray-800`}
         >
           {showDetails ? '▼ Hide Details' : '▶ Show Details'}
         </button>
@@ -43,22 +44,22 @@ export default function RosterStatsPanel({ stats, generationResult, members, act
 
       {/* Summary Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
-        <div className="bg-white/50 backdrop-blur-sm rounded-lg p-3 border border-white/40 shadow-sm">
-          <div className="text-[11px] font-medium uppercase tracking-wider text-gray-500 mb-1">Total Shifts Required</div>
+        <div className={`${glassCard} p-3`}>
+          <div className={`${tierLabel} mb-1`}>Total Shifts Required</div>
           <div className="text-2xl font-bold tracking-tight text-gray-900">{totalSlots}</div>
-          <div className="text-xs text-gray-500 mt-1">
+          <div className={`${helperText} mt-1`}>
             Across {totalEvents} events over {monthCount} {monthCount === 1 ? 'month' : 'months'}
           </div>
         </div>
 
-        <div className="bg-white/50 backdrop-blur-sm rounded-lg p-3 border border-white/40 shadow-sm">
-          <div className="text-[11px] font-medium uppercase tracking-wider text-gray-500 mb-1">Average Shifts Per Member</div>
+        <div className={`${glassCard} p-3`}>
+          <div className={`${tierLabel} mb-1`}>Average Shifts Per Member</div>
           <div className="text-2xl font-bold tracking-tight text-gray-900">{avgSlotsPerMember}
-            <span className="ml-1 text-[11px] font-normal uppercase tracking-wide text-gray-400">
+            <span className={`ml-1 ${tierUnit}`}>
                 shifts/roster
             </span>
           </div>
-          <div className="text-xs text-gray-500 mt-1">
+          <div className={`${helperText} mt-1`}>
             {Math.round(avgSlotsPerMember / monthCount * 10) / 10} shifts/month
           </div>
         </div>
@@ -66,13 +67,13 @@ export default function RosterStatsPanel({ stats, generationResult, members, act
 
       {/* Unassignable Roles Warning */}
       {generationResult?.stats?.unassignableRoles && generationResult.stats.unassignableRoles.length > 0 && (
-        <div className="bg-red-50 rounded-lg p-3 border border-red-200 mb-3">
-          <div className="text-[11px] font-semibold uppercase tracking-wider text-red-800 mb-2">
-            ⚠️ Unassignable Roles ({generationResult.stats.unassignableRoles.length})
+        <div className={`rounded-lg p-3 mb-3 ${semanticError}`}>
+          <div className="text-[11px] font-semibold uppercase tracking-wider text-red-700 mb-2">
+            Unassignable Roles ({generationResult.stats.unassignableRoles.length})
           </div>
           <div className="space-y-1.5 text-xs max-h-32 overflow-y-auto">
             {generationResult.stats.unassignableRoles.map((item, idx) => (
-              <div key={idx} className="bg-white rounded p-2">
+              <div key={idx} className={`${glassCard} p-2`}>
                 <div className="font-medium text-gray-900">{item.event}</div>
                 <div className="text-gray-600">{item.date} - {item.role}</div>
                 <div className="text-red-600 text-xs mt-0.5">{item.reason}</div>
@@ -101,15 +102,15 @@ export default function RosterStatsPanel({ stats, generationResult, members, act
 
           {/* Generic Log — captures generation and manual swaps/updates/deletes/inserts */}
           {actionLog.length > 0 && (
-            <details className="mt-3 rounded-lg border border-white/40 bg-white/40 backdrop-blur-sm shadow-sm">
-              <summary className="cursor-pointer select-none px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-gray-600 hover:text-gray-900">
+            <details className={`mt-3 ${glassCard}`}>
+              <summary className={`cursor-pointer select-none px-3 py-2 ${tierSection} hover:text-gray-900`}>
                 Log <span className="font-normal normal-case tracking-normal text-gray-400">({actionLog.length} entries)</span>
               </summary>
               <div className="border-t border-gray-200 px-3 py-3">
                 <div className="flex justify-end mb-2">
                   <button
                     onClick={() => navigator.clipboard?.writeText(actionLog.map(formatEntry).join('\n'))}
-                    className="text-[11px] font-medium uppercase tracking-wide text-gray-400 hover:text-gray-700"
+                    className={`${tierUnit} hover:text-gray-700`}
                   >
                     Copy
                   </button>

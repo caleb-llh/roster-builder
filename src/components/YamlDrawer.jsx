@@ -2,6 +2,8 @@ import { useState, useEffect, useRef } from 'react'
 import yaml from 'js-yaml'
 import CodeMirror from '@uiw/react-codemirror'
 import { yaml as yamlLang } from '@codemirror/lang-yaml'
+import { modalBackdrop, hoverRow } from '../utils/statsTheme'
+import { ModalHeader } from './SharedComponents'
 
 /**
  * Right-hand side drawer hosting an editable YAML pane with two-way binding to
@@ -121,13 +123,13 @@ export default function YamlDrawer({ open, onClose, data, onReplace, onImport })
     <>
       {/* Backdrop */}
       <div
-        className={`fixed inset-0 z-40 bg-black/30 transition-opacity ${open ? 'opacity-100' : 'pointer-events-none opacity-0'}`}
+        className={`fixed inset-0 z-40 ${modalBackdrop} transition-opacity ${open ? 'opacity-100' : 'pointer-events-none opacity-0'}`}
         onClick={onClose}
       />
 
       {/* Drawer: bottom-sheet on mobile, right-side drawer on sm+ */}
       <aside
-        className={`fixed z-50 flex transform flex-col bg-white shadow-2xl transition-transform duration-300 ease-out
+        className={`fixed z-50 flex transform flex-col bg-white/85 backdrop-blur-xl shadow-2xl transition-transform duration-300 ease-out
           inset-x-0 bottom-0 h-[85vh] rounded-t-2xl pb-safe sm:pb-0
           sm:inset-y-0 sm:right-0 sm:left-auto sm:h-full sm:w-full sm:max-w-xl sm:rounded-none
           ${open ? 'translate-y-0 sm:translate-x-0' : 'translate-y-full sm:translate-x-full sm:translate-y-0'}`}
@@ -140,25 +142,15 @@ export default function YamlDrawer({ open, onClose, data, onReplace, onImport })
         </div>
 
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3">
-          <div className="flex items-center gap-2">
-            <h2 className="text-lg font-bold text-gray-900">YAML</h2>
-            <span className={`text-xs font-medium ${valid ? 'text-gray-400' : 'text-red-500'}`}>
-              ({status})
-            </span>
-          </div>
-          <button
-            onClick={onClose}
-            className="text-2xl leading-none text-gray-400 hover:text-gray-700"
-            title="Close"
-          >
-            ×
-          </button>
-        </div>
+        <ModalHeader title="YAML" onClose={onClose}>
+          <span className={`text-xs font-medium ${valid ? 'text-gray-400' : 'text-red-500'}`}>
+            ({status})
+          </span>
+        </ModalHeader>
 
         {/* Toolbar */}
         <div className="flex items-center gap-2 border-b border-gray-100 px-4 py-2">
-          <label className="cursor-pointer rounded border border-dashed border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:border-blue-400 hover:bg-blue-50/50">
+          <label className={`cursor-pointer rounded border border-dashed border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:border-gray-400 ${hoverRow}`}>
             <input type="file" accept=".yaml,.yml" onChange={handleFileUpload} className="hidden" />
             Upload file
           </label>
@@ -188,7 +180,7 @@ export default function YamlDrawer({ open, onClose, data, onReplace, onImport })
                 className="absolute right-2 top-2 z-10 flex items-center gap-1 rounded-md bg-white/90 px-2 py-1 text-xs font-medium text-gray-600 shadow-sm ring-1 ring-gray-200 backdrop-blur hover:bg-white hover:text-gray-900"
                 title="Copy YAML to clipboard"
               >
-                {copied ? '✓ Copied' : '⧉ Copy'}
+                {copied ? 'Copied' : 'Copy'}
               </button>
             )}
             <CodeMirror
@@ -216,14 +208,14 @@ export default function YamlDrawer({ open, onClose, data, onReplace, onImport })
 
         {/* Validation footer */}
         {!valid && (
-          <div className="max-h-48 overflow-y-auto border-t border-red-200 bg-red-50 p-3 text-sm text-red-700">
+          <div className="max-h-48 overflow-y-auto border-t border-red-200/60 bg-red-50/50 backdrop-blur-sm p-3 text-sm text-red-700">
             <ul className="list-inside list-disc space-y-1">
               {errors.map((e, i) => (
                 <li key={i}>{e}</li>
               ))}
             </ul>
             {data && (
-              <p className="mt-1 text-xs italic text-red-600">
+              <p className="mt-1 text-xs italic text-red-500">
                 The roster keeps its last valid state until the YAML is fixed.
               </p>
             )}

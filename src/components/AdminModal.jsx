@@ -1,4 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
+import { modalBackdrop, glassModal, tierSection, semanticError, btnPrimary, monoChip } from '../utils/statsTheme'
+import { ModalHeader } from './SharedComponents'
 
 /**
  * Owner-only admin panel: create a roster, invite/manage members by email.
@@ -73,23 +75,18 @@ export default function AdminModal({ open, onClose, roster }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
-      <div className="relative z-10 flex max-h-[85vh] w-full max-w-md flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
-        <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3">
-          <h2 className="text-lg font-bold text-gray-900">Manage roster</h2>
-          <button onClick={onClose} className="text-2xl leading-none text-gray-400 hover:text-gray-700" title="Close">
-            ×
-          </button>
-        </div>
+      <div className={`absolute inset-0 ${modalBackdrop}`} onClick={onClose} />
+      <div className={`relative z-10 flex max-h-[85vh] w-full max-w-md flex-col overflow-hidden ${glassModal}`}>
+        <ModalHeader title="Manage roster" onClose={onClose} />
 
-        <div className="flex-1 space-y-6 overflow-y-auto p-4">
+        <div className="flex-1 space-y-6 overflow-y-auto p-4 sm:p-6">
           {error && (
-            <div className="rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>
+            <div className={`rounded px-3 py-2 text-sm ${semanticError}`}>{error}</div>
           )}
 
           {/* Create roster */}
           <section>
-            <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">Create a new roster</h3>
+            <h3 className={`mb-2 ${tierSection}`}>Create a new roster</h3>
             <div className="flex gap-2">
               <input
                 value={newRosterName}
@@ -100,7 +97,7 @@ export default function AdminModal({ open, onClose, roster }) {
               <button
                 onClick={handleCreate}
                 disabled={busy}
-                className="rounded-lg bg-gray-800 px-3 py-2 text-sm font-medium text-white hover:bg-gray-900 disabled:opacity-50"
+                className={`${btnPrimary} px-3 py-2 text-sm disabled:opacity-50`}
               >
                 Create
               </button>
@@ -110,7 +107,7 @@ export default function AdminModal({ open, onClose, roster }) {
 
           {/* Invite by email */}
           <section>
-            <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">Whitelist by email</h3>
+            <h3 className={`mb-2 ${tierSection}`}>Whitelist by email</h3>
             <div className="flex gap-2">
               <input
                 value={inviteEmail}
@@ -131,7 +128,7 @@ export default function AdminModal({ open, onClose, roster }) {
               <button
                 onClick={handleInvite}
                 disabled={busy || !inviteEmail}
-                className="rounded-lg bg-gray-800 px-3 py-2 text-sm font-medium text-white hover:bg-gray-900 disabled:opacity-50"
+                className={`${btnPrimary} px-3 py-2 text-sm disabled:opacity-50`}
               >
                 Add
               </button>
@@ -141,7 +138,7 @@ export default function AdminModal({ open, onClose, roster }) {
 
           {/* Members list */}
           <section>
-            <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">Members</h3>
+            <h3 className={`mb-2 ${tierSection}`}>Members</h3>
             {loading ? (
               <p className="text-sm text-gray-400">Loading…</p>
             ) : members.length === 0 ? (
@@ -178,12 +175,12 @@ export default function AdminModal({ open, onClose, roster }) {
           {/* Pending invites */}
           {invites.length > 0 && (
             <section>
-              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">Pending invites</h3>
+              <h3 className={`mb-2 ${tierSection}`}>Pending invites</h3>
               <ul className="space-y-2">
                 {invites.map((i) => (
                   <li key={i.email} className="flex items-center gap-2">
                     <span className="min-w-0 flex-1 truncate text-sm text-gray-500">{i.email}</span>
-                    <span className="rounded-md bg-gray-100 px-2 py-0.5 text-xs text-gray-500">{i.role}</span>
+                    <span className={`rounded-md px-2 py-0.5 text-xs ${monoChip}`}>{i.role}</span>
                     <button
                       onClick={() => handleRevoke(i.email)}
                       disabled={busy}

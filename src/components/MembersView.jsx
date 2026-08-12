@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { WarningBanner, MemberCard } from './SharedComponents'
+import { IssueSummary, MemberCard } from './SharedComponents'
+import { headingPage, hoverRow } from '../utils/statsTheme'
 
 export default function MembersView({ members, roles, roleColorMap, warnings, searchQuery, memberConstraints, memberPreferences }) {
   const [selectedRole, setSelectedRole] = useState('All')
@@ -26,16 +27,23 @@ export default function MembersView({ members, roles, roleColorMap, warnings, se
   // Counts reflect active members only (inactive members aren't rostered).
   const roleCount = (role) => members.filter(m => isActive(m) && matchesRole(m, role)).length
 
+  const warningItems = (warnings || []).map(w => ({ level: 'warning', msg: w }))
+
   return (
-    <div className="p-6">
-      <h2 className="text-2xl font-bold text-gray-900 mb-6">Members</h2>
-      {warnings && <WarningBanner warnings={warnings} />}
+    <div className="p-4 sm:p-6">
+      <div className="mb-4 sm:mb-6">
+        <div className="flex items-center gap-3">
+          <h2 className={headingPage}>Members</h2>
+          <IssueSummary warningCount={warnings?.length || 0} items={warningItems} />
+        </div>
+      </div>
       
-      {/* Role Filter Buttons */}
+      {/* Role Filter Buttons — neutral glass chips; the role hue shows only in
+          the label text (matching the coloured-font role tags elsewhere). */}
       <div className="mb-6 flex flex-wrap gap-2">
         <button
           onClick={() => setSelectedRole('All')}
-          className={`px-4 py-2 rounded-lg font-medium transition-all ${selectedRole === 'All' ? 'bg-blue-500/80 backdrop-blur-md text-white shadow-lg border border-blue-300/30' : 'bg-white/40 backdrop-blur-md text-gray-700 hover:bg-white/60 border border-white/30 shadow-md'}`}
+          className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-all ${selectedRole === 'All' ? 'bg-gray-800 text-white shadow-sm' : `bg-white/50 backdrop-blur-sm border border-white/40 text-gray-700 ${hoverRow}`}`}
         >
           All ({roleCount('All')})
         </button>
@@ -43,9 +51,10 @@ export default function MembersView({ members, roles, roleColorMap, warnings, se
           <button
             key={role}
             onClick={() => setSelectedRole(role)}
-            className={`px-4 py-2 rounded-lg font-medium transition-all backdrop-blur-md border ${roleColorMap[role]} ${selectedRole === role ? 'shadow-lg ring-2 ring-offset-2 ring-current' : 'opacity-60 hover:opacity-80 shadow-md'}`}
+            className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-all bg-white/50 backdrop-blur-sm border ${selectedRole === role ? 'border-gray-400 shadow-sm' : `border-white/40 opacity-70 hover:opacity-100 ${hoverRow}`}`}
           >
-            {role} ({roleCount(role)})
+            <span className={roleColorMap[role]}>{role}</span>
+            <span className="ml-1 text-gray-500">({roleCount(role)})</span>
           </button>
         ))}
       </div>

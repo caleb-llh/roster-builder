@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { createRoleColorMap, formatDateRange } from './utils/colorUtils'
+import { createRoleColorMap, formatDateRange, formatDate } from './utils/colorUtils'
 import { calculateRosterStats } from './utils/rosterStats'
 import { validateEventAssignments } from './utils/assignmentValidator'
 import { generateRoster } from './utils/rosterGenerator'
@@ -8,7 +8,7 @@ import { computeRosterDiff } from './utils/rosterDiff'
 import { useRosterData } from './hooks/useRosterData'
 import { canSwapRosterSlots } from './utils/constraintsUtils'
 import { getActiveConstraints, getActivePreferences, getConstraintDescription, getPreferenceDescription, MEMBER_PREF_FIELDS } from './schema/rosterSchema'
-import { ErrorDisplay } from './components/SharedComponents'
+import { ErrorDisplay, GlassFab } from './components/SharedComponents'
 import MembersView from './components/MembersView'
 import EventsView from './components/EventsView'
 import RosterStatsPanel from './components/RosterStatsPanel'
@@ -17,6 +17,7 @@ import GenerationResultModal from './components/GenerationResultModal'
 import ChangeReviewPanel from './components/ChangeReviewPanel'
 import YamlDrawer from './components/YamlDrawer'
 import AdminModal from './components/AdminModal'
+import { headingPage, headingModal, glassModal, glassCard, modalBackdrop, btnDanger, btnPrimary, tabActive, tabInactive, monoChip, semanticError, glassPanel, tierSection } from './utils/statsTheme'
 
 function App({ auth }) {
   // UI State
@@ -340,13 +341,15 @@ function App({ auth }) {
         : `Moved ${nameOf(memberA || memberB)} to ${(memberA ? eventB : eventA).date}/${(memberA ? slotB : slotA).role}`
 
     // A swap rewrites two occupants at once (loss-ful), so stage it for
-    // confirmation instead of applying immediately.
+    // confirmation instead of applying immediately. The payload carries the
+    // two slots' before/after occupants so the dialog can render a structured
+    // before→after card rather than a prose sentence.
     setPendingSwap({
       nextEvents,
       message,
-      prompt: memberA && memberB
-        ? `Swap ${nameOf(memberA)} ↔ ${nameOf(memberB)}?`
-        : `Move ${nameOf(memberA || memberB)}?`,
+      isMove: !(memberA && memberB),
+      slotA: { date: eventA.date, role: slotA.role, before: nameOf(memberA), after: nameOf(memberB) },
+      slotB: { date: eventB.date, role: slotB.role, before: nameOf(memberB), after: nameOf(memberA) },
     })
   }
 
@@ -453,19 +456,19 @@ function App({ auth }) {
     return count + event.roster.filter(r => !r.member_id).length
   }, 0)
 
-  if (loading) return <div className="min-h-screen bg-gray-50 flex items-center justify-center"><div className="text-gray-600">Loading...</div></div>
+  if (loading) return <div className="min-h-screen bg-white/40 flex items-center justify-center"><div className="text-gray-600">Loading...</div></div>
   if (error) return <ErrorDisplay title={error.type === 'validation' ? 'Validation Errors' : 'Loading Error'} message={error.message} hint={error.type === 'load' ? 'Check YAML file syntax. Telegram handles need quotes.' : undefined} />
 
   return (
     <div className="min-h-screen bg-slate-50">
       {/* Header */}
-      <header className="bg-white/40 backdrop-blur-md shadow-lg border-b border-white/30 pt-safe">
+      <header className={`${glassPanel} border-b pt-safe`}>
         <div className="max-w-full px-3 sm:px-6 lg:px-8 py-3 sm:py-4">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-2">
             <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
-              <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Roster Builder</h1>
+              <h1 className={headingPage}>Roster Builder</h1>
               {rosterPeriod && rosterPeriod.start_date && rosterPeriod.end_date && (
-                <div className="text-xs sm:text-sm font-medium text-gray-700 bg-blue-100/60 px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg border border-blue-200/30 w-fit">
+                <div className={`text-xs sm:text-sm font-medium px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg w-fit ${monoChip}`}>
                   {formatDateRange(rosterPeriod.start_date, rosterPeriod.end_date)}
                 </div>
               )}
@@ -490,7 +493,7 @@ function App({ auth }) {
                     className="rounded-md border border-gray-300 px-2 py-1 font-medium text-gray-600 hover:bg-gray-100 touch-manipulation"
                     title="Manage roster & members"
                   >
-                    ⚙ Manage
+                    Manage
                   </button>
                 )}
                 <span className="max-w-[180px] truncate">{auth.user.email}</span>
@@ -518,7 +521,7 @@ function App({ auth }) {
                 placeholder="Search members and events..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full px-3 sm:px-4 py-2 pr-10 text-sm sm:text-base bg-white/40 backdrop-blur-md border border-white/30 rounded-lg shadow-lg focus:ring-2 focus:ring-blue-400/50 focus:border-transparent placeholder-gray-600 touch-manipulation"
+                className={`w-full px-3 sm:px-4 py-2 pr-10 text-sm sm:text-base ${glassPanel} focus:ring-2 focus:ring-gray-400/50 focus:border-transparent placeholder-gray-600 touch-manipulation`}
               />
               {searchQuery && (
                 <button
@@ -594,13 +597,13 @@ function App({ auth }) {
       <div className="lg:hidden sticky top-0 z-30 flex bg-white/70 backdrop-blur-md border-b border-gray-200">
         <button
           onClick={() => setActiveTab('members')}
-          className={`flex-1 py-3 text-sm font-semibold transition-colors touch-manipulation ${activeTab === 'members' ? 'text-blue-600 border-b-2 border-blue-500' : 'text-gray-500'}`}
+          className={`flex-1 py-3 text-sm font-semibold transition-colors touch-manipulation ${activeTab === 'members' ? tabActive : tabInactive}`}
         >
           Members <span className="text-xs font-normal">({activeMembers.length})</span>
         </button>
         <button
           onClick={() => setActiveTab('events')}
-          className={`flex-1 py-3 text-sm font-semibold transition-colors touch-manipulation ${activeTab === 'events' ? 'text-blue-600 border-b-2 border-blue-500' : 'text-gray-500'}`}
+          className={`flex-1 py-3 text-sm font-semibold transition-colors touch-manipulation ${activeTab === 'events' ? tabActive : tabInactive}`}
         >
           Events <span className="text-xs font-normal">({events.length})</span>
         </button>
@@ -646,45 +649,45 @@ function App({ auth }) {
       {!showDrawer && (
         <div className="fixed right-4 z-40 flex flex-col items-end gap-2 bottom-safe sm:right-6">
           {hasUnassignedRoles && permissions.canEditRoster && (
-            <button
+            <GlassFab
               onClick={handleGenerateRoster}
-              className="relative flex h-14 w-14 items-center justify-center rounded-full bg-white/80 backdrop-blur-md border border-gray-300/50 text-2xl text-gray-700 shadow-lg hover:bg-white active:scale-95 transition-all touch-manipulation"
+              className="relative h-14 w-14 text-[11px] font-semibold uppercase tracking-wide"
               title="Generate roster"
             >
-              ✨
+              Auto
               {unassignedRolesCount > 0 && (
                 <span className="absolute -top-1 -right-1 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-gray-700 px-1 text-xs font-bold text-white shadow">
                   {unassignedRolesCount}
                 </span>
               )}
-            </button>
+            </GlassFab>
           )}
           {canUndo && permissions.canUndo && (
-            <button
+            <GlassFab
               onClick={handleUndo}
-              className="flex h-12 w-12 items-center justify-center rounded-full bg-white/80 backdrop-blur-md border border-gray-300/50 text-lg text-gray-700 shadow-lg hover:bg-white active:scale-95 transition-all touch-manipulation"
+              className="h-12 w-12 text-lg"
               title="Undo (Ctrl/Cmd+Z)"
             >
               ↶
-            </button>
+            </GlassFab>
           )}
           {canRedo && permissions.canUndo && (
-            <button
+            <GlassFab
               onClick={handleRedo}
-              className="flex h-12 w-12 items-center justify-center rounded-full bg-white/80 backdrop-blur-md border border-gray-300/50 text-lg text-gray-700 shadow-lg hover:bg-white active:scale-95 transition-all touch-manipulation"
+              className="h-12 w-12 text-lg"
               title="Redo (Ctrl/Cmd+Shift+Z)"
             >
               ↷
-            </button>
+            </GlassFab>
           )}
           {permissions.canImport && (
-            <button
+            <GlassFab
               onClick={() => setShowDrawer(true)}
-              className="flex h-12 w-12 items-center justify-center rounded-full bg-white/80 backdrop-blur-md border border-gray-300/50 text-lg shadow-lg hover:bg-white active:scale-95 transition-all touch-manipulation"
+              className="h-12 w-12 text-base font-mono"
               title="View & edit YAML"
             >
-              📄
-            </button>
+              {'{ }'}
+            </GlassFab>
           )}
         </div>
       )}
@@ -705,28 +708,47 @@ function App({ auth }) {
 
       {/* Invalid-swap toast */}
       {swapNotice && (
-        <div className="fixed bottom-4 left-1/2 z-50 -translate-x-1/2 rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-800 shadow-lg">
+        <div className={`fixed bottom-4 left-1/2 z-50 -translate-x-1/2 rounded-lg px-4 py-2 text-sm shadow-lg ${semanticError}`}>
           {swapNotice}
         </div>
       )}
       {/* Swap confirmation (drag-and-drop rewrites two slots — loss-ful) */}
       {pendingSwap && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" onClick={() => setPendingSwap(null)}>
-          <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-2xl" onClick={e => e.stopPropagation()}>
-            <p className="text-base font-semibold text-gray-900">{pendingSwap.prompt}</p>
-            <p className="mt-1 text-sm text-gray-600">{pendingSwap.message}</p>
+        <div className={`fixed inset-0 z-50 flex items-center justify-center p-4 ${modalBackdrop}`} onClick={() => setPendingSwap(null)}>
+          <div className={`w-full max-w-sm p-4 sm:p-6 ${glassModal}`} onClick={e => e.stopPropagation()}>
+            <h2 className={headingModal}>{pendingSwap.isMove ? 'Confirm move' : 'Confirm swap'}</h2>
+            <div className="mt-4 space-y-2">
+              {[pendingSwap.slotA, pendingSwap.slotB].map((slot, i) => (
+                <div key={i} className={`flex items-center gap-3 rounded-lg p-2.5 ${glassCard}`}>
+                  <div className="min-w-0 flex-1">
+                    <div className={tierSection}>
+                      {formatDate(slot.date)} · {slot.role}
+                    </div>
+                    <div className="flex items-center gap-2 text-sm text-gray-900">
+                      <span className={slot.before === slot.after ? '' : 'text-gray-400 line-through'}>{slot.before}</span>
+                      {slot.before !== slot.after && (
+                        <>
+                          <span className="text-gray-400">→</span>
+                          <span className="font-semibold">{slot.after}</span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
             <div className="mt-4 flex justify-end gap-2">
               <button
                 type="button"
                 onClick={() => setPendingSwap(null)}
-                className="rounded-lg px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-100 touch-manipulation"
+                className="rounded-lg px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-500/10 touch-manipulation"
               >
                 Cancel
               </button>
               <button
                 type="button"
                 onClick={confirmSwap}
-                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 touch-manipulation"
+                className={`px-4 py-2 text-sm ${btnPrimary} touch-manipulation`}
               >
                 Confirm
               </button>
@@ -736,22 +758,22 @@ function App({ auth }) {
       )}
       {/* Role-slot removal confirmation (removes an entire role requirement) */}
       {pendingRemoveSlot && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" onClick={() => setPendingRemoveSlot(null)}>
-          <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-2xl" onClick={e => e.stopPropagation()}>
+        <div className={`fixed inset-0 z-50 flex items-center justify-center p-4 ${modalBackdrop}`} onClick={() => setPendingRemoveSlot(null)}>
+          <div className={`w-full max-w-sm p-5 ${glassModal}`} onClick={e => e.stopPropagation()}>
             <p className="text-base font-semibold text-gray-900">{pendingRemoveSlot.prompt}</p>
             <p className="mt-1 text-sm text-gray-600">{pendingRemoveSlot.message}</p>
             <div className="mt-4 flex justify-end gap-2">
               <button
                 type="button"
                 onClick={() => setPendingRemoveSlot(null)}
-                className="rounded-lg px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-100 touch-manipulation"
+                className="rounded-lg px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-500/10 touch-manipulation"
               >
                 Cancel
               </button>
               <button
                 type="button"
                 onClick={confirmRemoveSlot}
-                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 touch-manipulation"
+                className={`px-4 py-2 text-sm ${btnDanger} touch-manipulation`}
               >
                 Remove
               </button>
@@ -761,22 +783,22 @@ function App({ auth }) {
       )}
       {/* Clear-generated confirmation (removes all auto-generated assignments) */}
       {pendingClearGenerated && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" onClick={() => setPendingClearGenerated(null)}>
-          <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-2xl" onClick={e => e.stopPropagation()}>
+        <div className={`fixed inset-0 z-50 flex items-center justify-center p-4 ${modalBackdrop}`} onClick={() => setPendingClearGenerated(null)}>
+          <div className={`w-full max-w-sm p-5 ${glassModal}`} onClick={e => e.stopPropagation()}>
             <p className="text-base font-semibold text-gray-900">{pendingClearGenerated.prompt}</p>
             <p className="mt-1 text-sm text-gray-600">{pendingClearGenerated.message}</p>
             <div className="mt-4 flex justify-end gap-2">
               <button
                 type="button"
                 onClick={() => setPendingClearGenerated(null)}
-                className="rounded-lg px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-100 touch-manipulation"
+                className="rounded-lg px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-500/10 touch-manipulation"
               >
                 Cancel
               </button>
               <button
                 type="button"
                 onClick={confirmClearGenerated}
-                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 touch-manipulation"
+                className={`px-4 py-2 text-sm ${btnDanger} touch-manipulation`}
               >
                 Remove
               </button>

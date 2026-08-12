@@ -9,6 +9,8 @@
  * The gate lives outside <App/> so the whole app is only mounted once the user
  * is known, keeping the data provider's assumptions simple.
  */
+import { glassModal, headingModal, btnNeutral } from '../utils/statsTheme'
+
 export default function AuthGate({ auth, children }) {
   const { mode, loading, session, signInWithGoogle } = auth
 
@@ -26,12 +28,12 @@ export default function AuthGate({ auth, children }) {
 
   return (
     <div className="flex min-h-screen items-center justify-center p-6">
-      <div className="w-full max-w-sm rounded-2xl border border-gray-200 bg-white p-8 text-center shadow-lg">
-        <h1 className="text-xl font-bold text-gray-900">Roster Builder</h1>
+      <div className={`w-full max-w-sm p-8 text-center ${glassModal}`}>
+        <h1 className={headingModal}>Roster Builder</h1>
         <p className="mt-2 text-sm text-gray-500">Sign in to view and edit your rosters.</p>
         <button
           onClick={signInWithGoogle}
-          className="mt-6 flex w-full items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 shadow-sm transition-colors hover:bg-gray-50 active:scale-[0.99] touch-manipulation"
+          className={`${btnNeutral} mt-6 flex w-full items-center justify-center gap-2 px-4 py-2.5 text-sm shadow-sm active:scale-[0.99] touch-manipulation`}
         >
           <img
             src="https://www.google.com/favicon.ico"

@@ -122,10 +122,11 @@ describe('derivedState', () => {
       const state = getDerivedState(data)
       expect(Object.keys(state.roleColorMap)).toHaveLength(20)
       
-      // All roles should have color assigned
+      // All roles should have color assigned (text-colour only — role tags
+      // render as coloured font, not a coloured pill; see colorUtils).
       state.roles.forEach(role => {
         expect(state.roleColorMap[role]).toBeTruthy()
-        expect(state.roleColorMap[role]).toContain('bg-')
+        expect(state.roleColorMap[role]).toContain('text-')
       })
     })
 
@@ -329,9 +330,10 @@ describe('derivedState', () => {
       
       const state = getDerivedState(data)
       
-      // Color classes should be valid Tailwind format (optional opacity suffix)
-      expect(state.roleColorMap.vm).toMatch(/bg-\w+-\d+(\/\d+)? text-\w+-\d+/)
-      expect(state.roleColorMap['cam-1']).toMatch(/bg-\w+-\d+(\/\d+)? text-\w+-\d+/)
+      // Color classes should be a valid Tailwind text-colour (role tags are
+      // coloured font on a neutral surface, not a coloured pill).
+      expect(state.roleColorMap.vm).toMatch(/^text-\w+-\d+$/)
+      expect(state.roleColorMap['cam-1']).toMatch(/^text-\w+-\d+$/)
     })
   })
 

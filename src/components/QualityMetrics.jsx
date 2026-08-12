@@ -1,4 +1,5 @@
 import { calculateDistribution, BellCurveChart } from '../utils/distributionUtils.jsx'
+import { tierTitle, tierSection, tierUnit, helperText, glassCard, glassPopup, glassArrow } from '../utils/statsTheme'
 
 /**
  * Light, translucent "glass" tooltip shown above its parent on hover. The
@@ -8,10 +9,10 @@ import { calculateDistribution, BellCurveChart } from '../utils/distributionUtil
 function Tooltip({ children }) {
   return (
     <span className="pointer-events-none absolute bottom-4 left-1/2 z-30 hidden -translate-x-1/2 group-hover/tt:block">
-      <span className="relative block whitespace-nowrap rounded-md border border-white/60 bg-white/80 px-2 py-1 text-[11px] font-medium text-slate-700 shadow-lg backdrop-blur-md">
+      <span className={`relative block whitespace-nowrap px-2 py-1 text-[11px] font-medium ${glassPopup}`}>
         {children}
         {/* arrow */}
-        <span className="absolute left-1/2 top-full h-2 w-2 -translate-x-1/2 -translate-y-1/2 rotate-45 border-b border-r border-white/60 bg-white/80" />
+        <span className={`absolute left-1/2 top-full h-2 w-2 -translate-x-1/2 -translate-y-1/2 ${glassArrow}`} />
       </span>
     </span>
   )
@@ -54,10 +55,10 @@ export default function QualityMetrics({ generationResult, members, stats, showR
       <div className="space-y-4">
         {/* Bell Curve */}
         <div>
-          <div className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-2">Shift Distribution</div>
-          <div className="bg-white/40 backdrop-blur-sm rounded-lg p-4 border border-white/40 shadow-sm">
+          <div className={`${tierSection} mb-2`}>Shift Distribution</div>
+          <div className={`${glassCard} p-4`}>
             <BellCurveChart sortedDistribution={sortedDistribution} maxMemberCount={maxMemberCount} members={members} />
-            <div className="text-center text-[11px] font-normal uppercase tracking-wide text-gray-400 mt-2">
+            <div className={`text-center ${tierUnit} mt-2`}>
               Shifts per member (Avg: {averageShifts})
             </div>
           </div>
@@ -67,7 +68,7 @@ export default function QualityMetrics({ generationResult, members, stats, showR
             each shift falls in the roster period, so clustering is intuitive. */}
         {timelineMembers.length > 0 && periodSpan != null && (
           <div className="pt-4 border-t border-gray-200">
-            <div className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-3">Time Spacing</div>
+            <div className={`${tierSection} mb-3`}>Time Spacing</div>
             {/* pt-6 leaves room for the first row's tooltip (it sits above the
                 dot); no overflow clipping so tooltips aren't cut off. */}
             <div className="space-y-2 pt-6">
@@ -116,7 +117,7 @@ export default function QualityMetrics({ generationResult, members, stats, showR
             different person; short bar = the same few people repeat the role. */}
         {showRoleDiversity && stats?.roleDiversity?.roleStats && (
           <div className="pt-4 border-t border-gray-200">
-            <div className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-3">Role Rotation Quality</div>
+            <div className={`${tierSection} mb-3`}>Role Rotation Quality</div>
             <div className="space-y-2">
               {stats.roleDiversity.roleStats
                 .slice()
@@ -138,7 +139,7 @@ export default function QualityMetrics({ generationResult, members, stats, showR
                   </div>
                 ))}
             </div>
-            <p className="text-xs text-gray-400 mt-2">
+            <p className={`${helperText} mt-2`}>
               Distinct members ÷ shifts per role. Fuller bars mean the role rotates through more people.
             </p>
           </div>
@@ -149,15 +150,15 @@ export default function QualityMetrics({ generationResult, members, stats, showR
 
   // Full view for GenerationResultModal
   return (
-    <div className="bg-gray-50 rounded-lg p-4">
-      <h3 className="font-semibold text-gray-900 mb-2">Quality Metrics</h3>
+    <div className="rounded-lg">
+      <h3 className={`${tierTitle} mb-2`}>Quality Metrics</h3>
       <p className="text-xs text-gray-500 mb-4">Lower scores are better (left on scale = better)</p>
       <div className="space-y-6">
         {/* Shift Balance */}
-        <div className="bg-white rounded-lg p-4 border border-gray-200">
+        <div className={`${glassCard} p-4`}>
           <div className="flex justify-between items-center mb-3">
             <div>
-              <span className="text-sm font-semibold text-gray-800">Shift Balance</span>
+              <span className={tierSection}>Shift Balance</span>
               <p className="text-xs text-gray-500 mt-0.5">Are shifts distributed fairly?</p>
             </div>
             <span className="text-xl font-bold text-gray-900">
@@ -188,14 +189,14 @@ export default function QualityMetrics({ generationResult, members, stats, showR
 
           {/* Distribution Details */}
           <div className="mt-4 pt-4 border-t border-gray-200">
-            <div className="text-xs font-semibold text-gray-700 mb-3">Distribution Details</div>
+            <div className={`${tierSection} mb-3`}>Distribution Details</div>
             
-            <div className="bg-white rounded-lg p-3 mb-3">
+            <div className={`${glassCard} p-3 mb-3`}>
               <div className="text-2xl font-bold text-slate-700">{averageShifts}</div>
               <div className="text-xs text-gray-600">Average shifts per member</div>
             </div>
             
-            <div className="bg-white rounded-lg p-3 mb-3">
+            <div className={`${glassCard} p-3 mb-3`}>
               <BellCurveChart sortedDistribution={sortedDistribution} maxMemberCount={maxMemberCount} members={members} />
               <div className="text-center text-xs text-gray-500 mt-2">
                 Shifts per member
@@ -205,10 +206,10 @@ export default function QualityMetrics({ generationResult, members, stats, showR
         </div>
 
         {/* Time Spacing */}
-        <div className="bg-white rounded-lg p-4 border border-gray-200">
+        <div className={`${glassCard} p-4`}>
           <div className="flex justify-between items-center mb-3">
             <div>
-              <span className="text-sm font-semibold text-gray-800">Time Spacing</span>
+              <span className={tierSection}>Time Spacing</span>
               <p className="text-xs text-gray-500 mt-0.5">Are shifts spread over time?</p>
             </div>
             <span className="text-xl font-bold text-gray-900">
@@ -240,10 +241,10 @@ export default function QualityMetrics({ generationResult, members, stats, showR
         
         {/* Role Rotation */}
         {showRoleDiversity && stats?.roleDiversity?.roleStats && (
-          <div className="bg-white rounded-lg p-4 border border-gray-200">
+          <div className={`${glassCard} p-4`}>
             <div className="flex justify-between items-center mb-3">
               <div>
-                <span className="text-sm font-semibold text-gray-800">Role Rotation</span>
+                <span className={tierSection}>Role Rotation</span>
                 <p className="text-xs text-gray-500 mt-0.5">Are different members trying each role?</p>
               </div>
               <span className="text-xl font-bold text-gray-900">
@@ -269,7 +270,7 @@ export default function QualityMetrics({ generationResult, members, stats, showR
               {stats.roleDiversity.roleStats
                 .sort((a, b) => b.uniqueMembers - a.uniqueMembers)
                 .map(roleStat => (
-                  <div key={roleStat.role} className="bg-gray-50 rounded p-3 text-xs border border-gray-100">
+                  <div key={roleStat.role} className={`${glassCard} p-3 text-xs`}>
                     <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-1 sm:gap-3">
                       <span className="font-medium text-gray-900">{roleStat.role}</span>
                       <div className="flex items-center gap-2 text-[11px] sm:text-xs">
