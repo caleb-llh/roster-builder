@@ -26,6 +26,11 @@
  *     whole-roster objective in `evaluateState` (fairness, spread, day/role
  *     preferences, consecutive-weekend avoidance, empty slots). Every soft goal
  *     that biases Phase 1 must also appear here, or local search can undo it.
+ *   - By DEFAULT (`optimizeExisting: false`) slots already filled when the run
+ *     started are locked, so this phase can only rearrange the slots THIS run
+ *     filled — generation is additive and never reshuffles prior assignments.
+ *     Pass `optimizeExisting: true` (future algorithm-settings toggle) to let it
+ *     re-optimize the whole roster.
  *
  * A fixed seed keeps output deterministic. Every meaningful decision is captured
  * by a verbose ActionLogger and returned as result.log / result.logEntries.
@@ -63,7 +68,7 @@ export function generateRoster(
   rosterPeriod,
   options = {}
 ) {
-  const { logging = true } = options
+  const { logging = true, optimizeExisting = false } = options
   const logger = new ActionLogger(logging)
 
   logger.info('Roster generation started', {
@@ -79,7 +84,7 @@ export function generateRoster(
     rosterConstraints,
     rosterPreferences,
     rosterPeriod,
-    { logger }
+    { logger, optimizeExisting }
   )
 
   // Restore chronological event order
@@ -107,7 +112,7 @@ function generateRosterSingleRun(
   rosterPeriod,
   options = {}
 ) {
-  const { seed = 1, localSearch = true, logger = NULL_LOGGER } = options
+  const { seed = 1, localSearch = true, optimizeExisting = false, logger = NULL_LOGGER } = options
   const rng = createRng(seed)
 
   // Initialize components
@@ -124,6 +129,21 @@ function generateRosterSingleRun(
   // Reversible state layer: all assignments go through applyMove so the tracker
   // and events stay in lock-step (and so the same primitives power local search).
   const state = new RosterState(sortedEvents, tracker)
+
+  // Default behaviour: generation only FILLS EMPTY SLOTS — it must not reshuffle
+  // assignments that already exist (including ones an earlier, still-uncommitted
+  // generation produced). We tag every slot occupied at the start of this run as
+  // `_preExisting` so `RosterState.isLocked` treats it as fixed and Phase 2 local
+  // search leaves it alone. `optimizeExisting` (future algorithm-settings toggle)
+  // opts back into whole-roster re-optimization. The tag is stripped before
+  // returning so it never leaks into the roster data.
+  if (!optimizeExisting) {
+    sortedEvents.forEach(event => {
+      event.roster?.forEach(roleAssignment => {
+        if (roleAssignment.member_id) roleAssignment._preExisting = true
+      })
+    })
+  }
   
   // Statistics tracking
   const stats = {
@@ -242,6 +262,14 @@ function generateRosterSingleRun(
   
   // Pins were only needed to protect planned promotions during local search.
   clearPromotionPins(sortedEvents)
+
+  // Strip the transient `_preExisting` lock markers so they never leak into the
+  // returned roster data (they exist only for this run's local-search locking).
+  sortedEvents.forEach(event => {
+    event.roster?.forEach(roleAssignment => {
+      if (roleAssignment._preExisting) delete roleAssignment._preExisting
+    })
+  })
 
   return {
     events: newEvents,

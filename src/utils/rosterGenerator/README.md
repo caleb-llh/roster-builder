@@ -55,7 +55,12 @@ A single seeded pass (reproducible / deterministic):
    move (member↔member swap, or filling an empty slot) until no improving move
    exists (or a safety iteration cap is hit). Every candidate is validated
    against hard constraints and applied reversibly. **Locked (pre-assigned,
-   non-generated) slots and pinned promotions are excluded from swaps.** The
+   non-generated) slots and pinned promotions are excluded from swaps.** **By
+   default (`optimizeExisting: false`) slots that were already filled when the
+   run started are locked too** — tagged `_preExisting` up front so
+   `RosterState.isLocked` protects them — so generation is *additive* (only fills
+   empty slots; it will not reshuffle prior, still-uncommitted assignments).
+   Pass `optimizeExisting: true` to re-open the whole roster to optimization. The
    objective is the whole-roster `evaluateState`: fairness, spread, day/role
    preference violations, **consecutive-weekend avoidance** (gated by
    `AVOID_CONSECUTIVE_WEEKS`), and empty slots — every soft goal that biases

@@ -39,12 +39,18 @@ export class RosterState {
    *  - a pre-assigned (manually authored) member — filled but NOT generated; or
    *  - a promotion pinned by the promotion-planning phase (`_pinnedPromotion`),
    *    which secured a trainee's real-role slot up front; letting search swap it
-   *    away would waste the promotion the phase deliberately reserved.
+   *    away would waste the promotion the phase deliberately reserved; or
+   *  - a slot that was already filled when THIS run started and `optimizeExisting`
+   *    is off (`_preExisting`). This is the default "only fill empty slots"
+   *    behaviour: prior assignments (including ones an earlier generation made)
+   *    are treated as fixed, so a new run adds to the roster without reshuffling
+   *    what is already there. See README → "Generation only fills empty slots".
    */
   isLocked(slot) {
     const roleAssignment = this.getSlot(slot)
     if (!roleAssignment?.member_id) return false
     if (roleAssignment._pinnedPromotion) return true
+    if (roleAssignment._preExisting) return true
     return !roleAssignment.isGenerated
   }
 

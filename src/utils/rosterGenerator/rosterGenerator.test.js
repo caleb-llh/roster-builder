@@ -117,10 +117,109 @@ describe('Roster Generator', () => {
       expect(result.events[1].roster[1].isGenerated).toBeFalsy()
     })
 
+    it('by default only fills empty slots and does not reshuffle prior generated assignments', () => {
+      // Charlie was placed on cam-1 in BOTH weeks by an earlier run (isGenerated).
+      // This is exactly the kind of spread/once-per-week imbalance the optimizer
+      // would normally fix by swapping — but the default (optimizeExisting: false)
+      // must treat prior assignments as fixed and only fill the still-empty slots.
+      const members = createTestMembers()
+      const events = createTestEvents()
+      events[0].roster[1].member_id = 'charlie'
+      events[0].roster[1].isGenerated = true
+      events[1].roster[1].member_id = 'charlie'
+      events[1].roster[1].isGenerated = true
+
+      const result = generateRoster(
+        events,
+        members,
+        [],
+        [],
+        rosterConstraints,
+        rosterPreferences,
+        rosterPeriod
+      )
+
+      // Prior generated assignments are untouched; only the empty vm slots got filled.
+      expect(result.events[0].roster[1].member_id).toBe('charlie')
+      expect(result.events[1].roster[1].member_id).toBe('charlie')
+      expect(result.events[0].roster[0].member_id).toBeTruthy()
+      expect(result.events[1].roster[0].member_id).toBeTruthy()
+      // The transient lock marker never leaks into the returned data.
+      expect(result.events[0].roster[1]._preExisting).toBeUndefined()
+    })
+
+    it('by default leaves a beneficial swap between prior generated slots untaken', () => {
+      // Same day-preference swap the `optimizeExisting:true` test proves IS taken;
+      // here (default) both slots were filled by an earlier run (isGenerated) and
+      // must stay locked, so the sub-optimal placement is preserved.
+      const members = [
+        { id: 'alice', name: 'Alice', include: true, roles: ['cam-1'] },
+        { id: 'bob', name: 'Bob', include: true, roles: ['cam-1'] },
+      ]
+      const memberPreferences = [
+        { member_id: 'alice', days: ['Saturday'] },
+        { member_id: 'bob', days: ['Sunday'] },
+      ]
+      const events = [
+        { name: 'Sat', date: '2026-02-07', day_of_week: 'Saturday', roster: [{ role: 'cam-1', member_id: 'bob', isGenerated: true }] },
+        { name: 'Sun', date: '2026-02-15', day_of_week: 'Sunday', roster: [{ role: 'cam-1', member_id: 'alice', isGenerated: true }] },
+      ]
+
+      const result = generateRoster(
+        events,
+        members,
+        [],
+        memberPreferences,
+        { [CONSTRAINT_KEYS.ENFORCE_MEMBER_ROLES]: true },
+        {},
+        { start_date: '2026-02-01', end_date: '2026-02-28' }
+      )
+
+      const byDate = Object.fromEntries(result.events.map(e => [e.date, e.roster[0].member_id]))
+      expect(byDate['2026-02-07']).toBe('bob')
+      expect(byDate['2026-02-15']).toBe('alice')
+    })
+
+    it('optimizeExisting:true re-opens a beneficial swap between prior generated slots', () => {
+      // Two members are each rostered on a weekend they do NOT prefer; swapping
+      // them fixes both day-preference violations. Both slots were filled by an
+      // earlier run (isGenerated), so ONLY re-optimization (optimizeExisting)
+      // may touch them — the default would leave the swap on the table.
+      const members = [
+        { id: 'alice', name: 'Alice', include: true, roles: ['cam-1'] },
+        { id: 'bob', name: 'Bob', include: true, roles: ['cam-1'] },
+      ]
+      const memberPreferences = [
+        { member_id: 'alice', days: ['Saturday'] },
+        { member_id: 'bob', days: ['Sunday'] },
+      ]
+      const events = [
+        { name: 'Sat', date: '2026-02-07', day_of_week: 'Saturday', roster: [{ role: 'cam-1', member_id: 'bob', isGenerated: true }] },
+        { name: 'Sun', date: '2026-02-15', day_of_week: 'Sunday', roster: [{ role: 'cam-1', member_id: 'alice', isGenerated: true }] },
+      ]
+      const constraints = { [CONSTRAINT_KEYS.ENFORCE_MEMBER_ROLES]: true }
+
+      const result = generateRoster(
+        events,
+        members,
+        [],
+        memberPreferences,
+        constraints,
+        {},
+        { start_date: '2026-02-01', end_date: '2026-02-28' },
+        { optimizeExisting: true }
+      )
+
+      const byDate = Object.fromEntries(result.events.map(e => [e.date, e.roster[0].member_id]))
+      // The swap happened: each member now works their preferred day.
+      expect(byDate['2026-02-07']).toBe('alice')
+      expect(byDate['2026-02-15']).toBe('bob')
+    })
+
     it('should provide generation statistics', () => {
       const members = createTestMembers()
       const events = createTestEvents()
-      
+
       const result = generateRoster(
         events,
         members,
