@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { calculateRosterStats } from './rosterStats'
+import { CONSTRAINT_KEYS } from '../schema/rosterSchema'
 
 describe('rosterStats', () => {
   describe('calculateRosterStats', () => {
@@ -258,6 +259,59 @@ describe('rosterStats', () => {
       ])
       expect(stats.periodStart).toBe(rosterPeriod.start_date)
       expect(stats.periodEnd).toBe(rosterPeriod.end_date)
+    })
+  })
+
+  describe('live unassignableRoles', () => {
+    const rosterPeriod = { start_date: '2026-08-01', end_date: '2026-08-31' }
+    // Only Charlie can do main-cam; everyone else is vm-only. With member-role
+    // enforcement on, an empty main-cam slot is unassignable unless Charlie is
+    // available and not already taken by the once-per-event rule.
+    const members = [
+      { id: 'alice', name: 'Alice', include: true, roles: ['vm'] },
+      { id: 'charlie', name: 'Charlie', include: true, roles: ['main-cam'] },
+    ]
+    const enforceRoles = { [CONSTRAINT_KEYS.ENFORCE_MEMBER_ROLES]: true }
+
+    it('flags a currently-empty slot that has no eligible member', () => {
+      const events = [{
+        name: 'Sunday Service', date: '2026-08-16',
+        roster: [
+          { role: 'vm', member_id: 'alice' },
+          { role: 'main-cam', member_id: null },
+        ],
+      }]
+      // Charlie is unavailable on that date → main-cam has no eligible member.
+      const memberConstraints = [{ member_id: 'charlie', unavailable_dates: ['2026-08-16'] }]
+      const stats = calculateRosterStats(events, members, rosterPeriod, memberConstraints, {
+        ...enforceRoles,
+        [CONSTRAINT_KEYS.ENFORCE_MEMBER_AVAILABILITY]: true,
+      })
+      expect(stats.unassignableRoles).toHaveLength(1)
+      expect(stats.unassignableRoles[0]).toMatchObject({
+        event: 'Sunday Service', date: '2026-08-16', role: 'main-cam',
+      })
+    })
+
+    it('drops the slot from the list once it is filled (real-time)', () => {
+      const events = [{
+        name: 'Sunday Service', date: '2026-08-16',
+        roster: [
+          { role: 'vm', member_id: 'alice' },
+          { role: 'main-cam', member_id: 'charlie' }, // now filled
+        ],
+      }]
+      const stats = calculateRosterStats(events, members, rosterPeriod, {}, enforceRoles)
+      expect(stats.unassignableRoles).toHaveLength(0)
+    })
+
+    it('does not flag an empty slot that still has an eligible member', () => {
+      const events = [{
+        name: 'Sunday Service', date: '2026-08-16',
+        roster: [{ role: 'main-cam', member_id: null }],
+      }]
+      const stats = calculateRosterStats(events, members, rosterPeriod, {}, enforceRoles)
+      expect(stats.unassignableRoles).toHaveLength(0)
     })
   })
 })

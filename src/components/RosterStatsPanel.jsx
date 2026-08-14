@@ -21,7 +21,7 @@ const CATEGORY_STYLE = {
   insert: 'bg-emerald-100 text-emerald-700',
 }
 
-export default function RosterStatsPanel({ stats, generationResult, members, actionLog = [] }) {
+export default function RosterStatsPanel({ stats, members, actionLog = [] }) {
   const [showDetails, setShowDetails] = useState(false)
 
   if (!stats || stats.totalSlots === 0) {
@@ -65,14 +65,16 @@ export default function RosterStatsPanel({ stats, generationResult, members, act
         </div>
       </div>
 
-      {/* Unassignable Roles Warning */}
-      {generationResult?.stats?.unassignableRoles && generationResult.stats.unassignableRoles.length > 0 && (
+      {/* Unassignable Roles Warning — driven by the LIVE roster stats (empty
+          slots with no eligible member), not the frozen generation snapshot, so
+          it updates in real time as slots are filled/emptied. */}
+      {stats.unassignableRoles && stats.unassignableRoles.length > 0 && (
         <div className={`rounded-lg p-3 mb-3 ${semanticError}`}>
           <div className="text-[11px] font-semibold uppercase tracking-wider text-red-700 mb-2">
-            Unassignable Roles ({generationResult.stats.unassignableRoles.length})
+            Unassignable Roles ({stats.unassignableRoles.length})
           </div>
           <div className="space-y-1.5 text-xs max-h-32 overflow-y-auto">
-            {generationResult.stats.unassignableRoles.map((item, idx) => (
+            {stats.unassignableRoles.map((item, idx) => (
               <div key={idx} className={`${glassCard} p-2`}>
                 <div className="font-medium text-gray-900">{item.event}</div>
                 <div className="text-gray-600">{item.date} - {item.role}</div>
@@ -83,10 +85,10 @@ export default function RosterStatsPanel({ stats, generationResult, members, act
         </div>
       )}
 
-      {/* Detailed Stats — always computed from the CURRENT roster state so
-          quality metrics stay real-time. `generationResult` is only used above
-          for the generation-only unassignable-roles warning and below for the
-          algorithm log. */}
+      {/* Detailed Stats — everything here is computed from the CURRENT roster
+          state (`stats`) so quality metrics and the unassignable-roles warning
+          above stay real-time. QualityMetrics is fed a `generationResult`-shaped
+          object built from the live stats purely to match its prop contract. */}
       {showDetails && (
         <div className="border-t border-gray-200 pt-3">
           <QualityMetrics

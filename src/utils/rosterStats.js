@@ -6,8 +6,9 @@
  * @returns {Object} - Statistics including total slots, per-member stats, etc.
  */
 import { AssignmentTracker } from './rosterGenerator/assignmentTracker'
+import { EligibilityChecker } from './rosterGenerator/eligibilityChecker'
 
-export const calculateRosterStats = (events, members, rosterPeriod) => {
+export const calculateRosterStats = (events, members, rosterPeriod, memberConstraints = {}, rosterConstraints = {}) => {
   if (!events || !members || !rosterPeriod) {
     return {
       totalSlots: 0,
@@ -16,7 +17,8 @@ export const calculateRosterStats = (events, members, rosterPeriod) => {
       avgSlotsPerEvent: 0,
       avgSlotsPerMonth: 0,
       avgSlotsPerMember: 0,
-      memberStats: []
+      memberStats: [],
+      unassignableRoles: []
     }
   }
 
@@ -155,6 +157,31 @@ export const calculateRosterStats = (events, members, rosterPeriod) => {
     assignmentsByMember
   }
 
+  // Live "unassignable roles": slots that are CURRENTLY empty and for which no
+  // active member is eligible under the current roster + constraints. Computed
+  // from the live `events` (not a generation snapshot) so the warning clears the
+  // moment a slot is filled — manually or by generation — and reappears if an
+  // eligible-less slot is emptied. Once-per-event eligibility is judged against
+  // the event's already-filled slots. See README → "Unassignable-roles warning
+  // is live, not a generation snapshot".
+  const eligibilityChecker = new EligibilityChecker(activeMembers, memberConstraints, rosterConstraints, tracker)
+  const unassignableRoles = []
+  events.forEach(event => {
+    if (!event.roster || !Array.isArray(event.roster)) return
+    const filledRoster = event.roster.filter(s => s.member_id)
+    event.roster.forEach(assignment => {
+      if (assignment.member_id) return // filled → not unassignable
+      if (eligibilityChecker.getEligibleMembers(assignment.role, event, filledRoster).length === 0) {
+        unassignableRoles.push({
+          event: event.name,
+          date: event.date,
+          role: assignment.role,
+          reason: 'No eligible members available'
+        })
+      }
+    })
+  })
+
   return {
     totalSlots,
     totalEvents,
@@ -165,6 +192,7 @@ export const calculateRosterStats = (events, members, rosterPeriod) => {
     memberStats,
     fairnessMetrics,
     assignedRoles,
+    unassignableRoles,
     // Roster date bounds, so the Time Spacing timeline can position dots on a
     // shared axis across all members.
     periodStart: rosterPeriod.start_date,

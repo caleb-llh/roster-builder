@@ -26,7 +26,6 @@ function App({ auth }) {
   const [showAdmin, setShowAdmin] = useState(false)
   const [activeTab, setActiveTab] = useState('events') // mobile-only: 'events' | 'members'
   const [showAlgorithmModal, setShowAlgorithmModal] = useState(false)
-  const [generationResult, setGenerationResult] = useState(null)
   const [generationNotice, setGenerationNotice] = useState(null) // transient neutral toast after generating
   // Height of the pinned "unsaved changes" bar, so other sticky toolbars (the
   // Events select bar) can offset below it instead of being obstructed.
@@ -100,7 +99,7 @@ function App({ auth }) {
   const getMemberName = (memberId) => memberId ? (members.find(m => m.id === memberId)?.name || memberId) : null
 
   const roleColorMap = createRoleColorMap(roles)
-  const rosterStats = calculateRosterStats(events, members, rosterPeriod)
+  const rosterStats = calculateRosterStats(events, members, rosterPeriod, memberConstraints, rosterConstraints)
   
   // Validate event assignments
   const validationResults = validateEventAssignments(
@@ -164,7 +163,6 @@ function App({ auth }) {
   // Handle YAML import from the drawer (fresh session).
   const handleImport = async (yamlText) => {
     const result = await importData(yamlText)
-    if (result.ok) setGenerationResult(null)
     return result
   }
 
@@ -198,7 +196,6 @@ function App({ auth }) {
 
       updateEvents(result.events)
       logAction(result.logEntries)
-      setGenerationResult(result)
 
       // filled-this-run = (slots empty before) − (slots still unassignable after)
       const unassignable = result.stats?.unassignableRoles?.length ?? 0
@@ -217,10 +214,10 @@ function App({ auth }) {
   // Undo / redo. These navigate the draft history and NEVER touch committed
   // state (committing is a separate concern — see the draft/commit spec).
   const handleUndo = () => {
-    if (undo()) setGenerationResult(null)
+    undo()
   }
   const handleRedo = () => {
-    if (redo()) setGenerationResult(null)
+    redo()
   }
 
   // Save the uncommitted draft (the "binding" update) / discard it.
@@ -235,7 +232,6 @@ function App({ auth }) {
   const handleDiscardDraft = () => {
     discardDraft()
     setShowChanges(false)
-    setGenerationResult(null)
   }
 
   // Keyboard shortcuts: Ctrl/Cmd+Z undo, Ctrl/Cmd+Shift+Z (or Ctrl+Y) redo.
@@ -642,7 +638,7 @@ function App({ auth }) {
           
           {/* Roster Statistics */}
           <div className="mt-3 sm:mt-4">
-            <RosterStatsPanel stats={rosterStats} generationResult={generationResult} members={members} actionLog={actionLog} />
+            <RosterStatsPanel stats={rosterStats} members={members} actionLog={actionLog} />
           </div>
           
           {/* Shared Search Bar */}
