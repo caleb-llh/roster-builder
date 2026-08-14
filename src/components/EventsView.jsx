@@ -448,8 +448,21 @@ export default function EventsView({ events, members, memberConstraints, roleCol
             <IssueSummary errorCount={totalErrors} warningCount={totalWarnings} items={issueDetails} />
           </div>
 
-          {/* Actions menu */}
-          <div className="relative" ref={menuRef}>
+          {/* Right-side actions */}
+          <div className="flex items-center gap-1">
+            {onEnterSelectAt && !selectMode && (
+              <button
+                type="button"
+                onClick={() => onEnterSelectAt(null)}
+                className={`rounded-lg px-3 py-2 text-sm font-medium text-gray-600 transition-colors ${hoverRow} min-h-[44px] touch-manipulation`}
+                title="Select assignments to bulk-edit"
+              >
+                Select
+              </button>
+            )}
+
+            {/* Actions menu */}
+            <div className="relative" ref={menuRef}>
             <button
               onClick={() => setMenuOpen(o => !o)}
               className="flex items-center justify-center rounded-lg px-2 py-2 text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-800 active:bg-gray-200 touch-manipulation min-h-[44px] min-w-[44px]"
@@ -498,6 +511,7 @@ export default function EventsView({ events, members, memberConstraints, roleCol
                 </button>
               </div>
             )}
+            </div>
           </div>
         </div>
       </div>
