@@ -4,7 +4,7 @@ import { useReducer, useCallback, useRef, useMemo } from 'react'
  * Draft / commit + undo / redo state, shared by every data provider.
  *
  * The provider owns the COMMITTED events (the "binding"). This module layers an
- * uncommitted DRAFT on top plus two history stacks. See README Design Decisions
+ * uncommitted DRAFT on top plus two history stacks. See specs/data-layer.md
  * → "Draft/commit is separate from undo/redo history".
  *
  * The state transitions are pure functions (exported for tests); the hook is a

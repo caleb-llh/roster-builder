@@ -341,7 +341,7 @@ describe('validators', () => {
   })
 
   // Binding-spec invariant: public/sample.yaml is the canonical, always-valid
-  // example of the input schema (see README Design Decisions). It must parse
+  // example of the input schema (see specs/data-layer.md). It must parse
   // and pass every validator with zero errors.
   describe('public/sample.yaml (canonical schema example)', () => {
     const samplePath = join(process.cwd(), 'public', 'sample.yaml')

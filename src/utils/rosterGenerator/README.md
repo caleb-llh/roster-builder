@@ -26,9 +26,9 @@ src/utils/rosterGenerator/
 
 > Understudy semantics (`../understudy.js`) — the `X-understudy` slot suffix,
 > `UNDERSTUDY_MIN_SESSIONS`, `canFillSlotRole` vs `isRoleCapable` — and the full
-> rationale for the cap/promotion/seeding decisions live in the root
-> [README → Design Decisions](../../../README.md#design-decisions-binding-spec),
-> which is the **binding spec**.
+> rationale for the cap/promotion/seeding decisions live in the
+> [understudy spec](../../../specs/understudy.md) (and
+> [generation spec](../../../specs/generation.md)), which are the **binding spec**.
 
 ## Algorithm Flow
 
@@ -135,7 +135,7 @@ the roster-quality evaluation so the two never drift apart:
 > **Availability is not a scorer either.** It was removed — availability is a
 > *hard constraint* (`ENFORCE_MEMBER_AVAILABILITY`), not a workload objective,
 > and it never survived local search. Do not re-introduce either as a scorer.
-> See the root [README → Design Decisions](../../../README.md#understudy-feature).
+> See the [generation spec](../../../specs/generation.md).
 
 ## Usage
 

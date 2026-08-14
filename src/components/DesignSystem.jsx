@@ -3,8 +3,8 @@
  *
  * A lightweight, standalone visual catalogue of every design token in
  * `statsTheme.js` and every shared primitive in `SharedComponents.jsx`. It is
- * the reference new work should look at so the app stays consistent (see the
- * "Design Decisions (binding spec)" in the root README).
+ * the reference new work should look at so the app stays consistent (see
+ * specs/design-system.md, the binding spec).
  *
  * It is reached via the `#design` hash (see `main.jsx`) so it needs no router
  * and stays out of the authenticated data flow. This file is allowlisted by the

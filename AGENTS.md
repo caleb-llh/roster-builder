@@ -5,9 +5,12 @@ central rule: **the spec is binding, and every change feeds back into it.**
 
 ## The spec
 
-The **binding specification** is the [Design Decisions](README.md#design-decisions-binding-spec)
-section of the root [`README.md`](README.md). It records *why* the system behaves
-the way it does. Supporting detail lives in
+The **binding specification** lives in [`specs/`](specs/) — one file per domain
+([architecture](specs/architecture.md), [data-layer](specs/data-layer.md),
+[generation](specs/generation.md), [understudy](specs/understudy.md),
+[design-system](specs/design-system.md), [events-ui](specs/events-ui.md)),
+indexed by [`specs/README.md`](specs/README.md). It records *why* the system
+behaves the way it does. Supporting detail lives in
 [`src/utils/rosterGenerator/README.md`](src/utils/rosterGenerator/README.md).
 
 The spec is authoritative:
@@ -28,10 +31,10 @@ Every bug fix or feature MUST close this loop **within the same change**:
 1. **Change the code** to fix the bug or add the feature.
 2. **Add or update tests** that lock in the new behavior.
 3. **Update the spec.** If the change makes, reverses, or clarifies a design
-   decision — or fixes a bug whose root cause is non-obvious — record it under
-   [Design Decisions](README.md#design-decisions-binding-spec). Include the
-   *rationale* (the "why"), not just the "what". If it changes the generator
-   internals, also update `src/utils/rosterGenerator/README.md`.
+   decision — or fixes a bug whose root cause is non-obvious — record it in the
+   relevant [`specs/`](specs/) file. Include the *rationale* (the "why"), not
+   just the "what". If it changes the generator internals, also update
+   `src/utils/rosterGenerator/README.md`.
 4. **Verify**: `npx vitest run` (all tests pass) and `npm run build` (succeeds).
 
 A change is not "done" until the spec reflects it. Knowledge from a debugging

@@ -4,7 +4,7 @@
  * to answer "who is affected?" before the draft is saved.
  *
  * The comparison is positional per event/slot, matching the data structure
- * (`event.roster` is a positional array — see README Design Decisions). A slot
+ * (`event.roster` is a positional array — see specs/data-layer.md). A slot
  * is identified by `(event.date, roleIndex)`. We report, per slot, one of:
  *   - 'added'    : slot exists in draft but not in committed (role requirement added)
  *   - 'removed'  : slot exists in committed but not in draft (role requirement removed)

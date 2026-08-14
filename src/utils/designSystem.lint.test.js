@@ -3,8 +3,8 @@
  *
  * The repo has no ESLint, so this test *is* the guardrail: it scans the JSX/JS
  * sources for class strings that must instead flow through a named token in
- * `statsTheme.js` (see the "Design Decisions (binding spec)" in the root
- * README). It is intentionally HIGH-SIGNAL, not exhaustive — it flags the
+ * `statsTheme.js` (see specs/design-system.md, the binding spec). It is
+ * intentionally HIGH-SIGNAL, not exhaustive — it flags the
  * unambiguous mistakes (copy-pasting a glass token's literal string, or using a
  * banned decorative hue) rather than every raw utility, so it never fights the
  * many legitimate one-off surfaces (hover states, the dark log console, the
