@@ -10,19 +10,21 @@ import { headingPage, glassMenu, hoverRow, tierSection, semanticError, semanticW
 
 /**
  * Status accent for an event card: a coloured top-left CORNER wedge, replacing
- * the old full-height left border. The parent card is `relative overflow-hidden`
- * so the rotated square clips into a clean triangle flush with the card's two
- * top-left edges. Colours reuse the app's semantic palette (red = error,
- * amber = warning).
+ * the old full-height left border. The wedge **clips itself** (its own
+ * `overflow-hidden` box) rather than relying on the parent card clipping it, so
+ * the card can stay overflow-visible and let inline dropdowns (the assignment
+ * picker) spill past its edges. Colours reuse the app's semantic palette
+ * (red = error, amber = warning).
  */
 function StatusCorner({ level }) {
   const isError = level === 'error'
   const wedge = isError ? 'bg-red-400/80' : 'bg-amber-400/80'
   const label = isError ? 'Has errors' : 'Has warnings'
   return (
-    <div className="pointer-events-none absolute left-0 top-0 z-[1] h-7 w-7" aria-hidden="true" title={label}>
+    <div className="pointer-events-none absolute left-0 top-0 z-[1] h-7 w-7 overflow-hidden rounded-tl-lg" aria-hidden="true" title={label}>
       {/* Rotated square offset up-left → its lower-right half shows as a
-          triangle hugging the corner (clipped by the card's overflow-hidden). */}
+          triangle hugging the corner (clipped by THIS box's overflow-hidden,
+          not the card's). */}
       <div className={`absolute -left-4 -top-4 h-8 w-8 rotate-45 ${wedge}`} />
     </div>
   )
@@ -630,7 +632,7 @@ export default function EventsView({ events, members, memberConstraints, roleCol
                 const statusLevel = hasErrors ? 'error' : hasWarnings ? 'warning' : null
                 
                 return (
-                <div key={eventIdx} className={`relative overflow-hidden ${overlayEventKey === eventKey || addRoleFor === event.date ? zPopover : ''} ${glassPanel} p-3 transition-colors`}>
+                <div key={eventIdx} className={`relative ${overlayEventKey === eventKey || addRoleFor === event.date ? zPopover : ''} ${glassPanel} p-3 transition-colors`}>
                   {statusLevel && <StatusCorner level={statusLevel} />}
                   <div className="mb-3">
                     <div className="text-xl font-bold text-gray-900 mb-1 flex items-center gap-2">
