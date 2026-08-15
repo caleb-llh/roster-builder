@@ -9,6 +9,26 @@ import { slotKey } from '../utils/bulkClear'
 import { headingPage, glassMenu, hoverRow, tierSection, semanticError, semanticWarning, glassPanel, zInCard, zSticky, zPopover } from '../utils/statsTheme'
 
 /**
+ * Status accent for an event card: a coloured top-left CORNER wedge, replacing
+ * the old full-height left border. The parent card is `relative overflow-hidden`
+ * so the rotated square clips into a clean triangle flush with the card's two
+ * top-left edges. Colours reuse the app's semantic palette (red = error,
+ * amber = warning).
+ */
+function StatusCorner({ level }) {
+  const isError = level === 'error'
+  const wedge = isError ? 'bg-red-400/80' : 'bg-amber-400/80'
+  const label = isError ? 'Has errors' : 'Has warnings'
+  return (
+    <div className="pointer-events-none absolute left-0 top-0 z-[1] h-7 w-7" aria-hidden="true" title={label}>
+      {/* Rotated square offset up-left → its lower-right half shows as a
+          triangle hugging the corner (clipped by the card's overflow-hidden). */}
+      <div className={`absolute -left-4 -top-4 h-8 w-8 rotate-45 ${wedge}`} />
+    </div>
+  )
+}
+
+/**
  * Copy text to the clipboard, returning true on success.
  *
  * Uses the async Clipboard API when available (HTTPS / localhost), and falls
@@ -600,20 +620,18 @@ export default function EventsView({ events, members, memberConstraints, roleCol
                 
                 // Day-of-week cue: cards stay a neutral monochrome glass (like
                 // the roster stats panel). The weekday is distinguished only by
-                // a faint accent hue on the DAY LABEL text — not a border. The
-                // coloured LEFT border is reserved for status: a slightly
-                // thicker one-sided stripe appears only for errors/warnings.
+                // a faint accent hue on the DAY LABEL text — not a border.
+                // Status (errors/warnings) is shown as a coloured top-left
+                // CORNER accent with a minimal icon (see statusCorner below),
+                // not a full-height left border.
                 const eventDate = new Date(event.date)
                 const dayOfWeek = eventDate.getDay()
                 const dayLabelColor = getCardColorForDay(dayOfWeek)
-                const statusStripe = hasErrors
-                  ? 'border-l-4 border-l-red-400'
-                  : hasWarnings
-                    ? 'border-l-4 border-l-amber-400'
-                    : ''
+                const statusLevel = hasErrors ? 'error' : hasWarnings ? 'warning' : null
                 
                 return (
-                <div key={eventIdx} className={`relative ${overlayEventKey === eventKey || addRoleFor === event.date ? zPopover : ''} ${glassPanel} ${statusStripe} p-3 transition-colors`}>
+                <div key={eventIdx} className={`relative overflow-hidden ${overlayEventKey === eventKey || addRoleFor === event.date ? zPopover : ''} ${glassPanel} p-3 transition-colors`}>
+                  {statusLevel && <StatusCorner level={statusLevel} />}
                   <div className="mb-3">
                     <div className="text-xl font-bold text-gray-900 mb-1 flex items-center gap-2">
                       {selectMode && (eventFilledKeys[event.date]?.length > 0) && (
