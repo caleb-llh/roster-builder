@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { IssueSummary, MemberCard } from './SharedComponents'
+import { IssueSummary } from './SharedComponents'
+import { MemberCard } from './MemberCard'
 import { headingPage, hoverRow } from '../utils/statsTheme'
 
 export default function MembersView({ members, roles, roleColorMap, warnings, searchQuery, memberConstraints, memberPreferences }) {

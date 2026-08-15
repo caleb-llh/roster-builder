@@ -6,6 +6,7 @@ import RosterSlotPill from './RosterSlotPill'
 import { IssueSummary } from './SharedComponents'
 import { understudySlotRole, isUnderstudyRole, baseRoleOf } from '../utils/understudy'
 import { slotKey } from '../utils/bulkClear'
+import { parseDayKey } from '../utils/calendarUtils'
 import { headingPage, glassMenu, glassCard, hoverRow, tierSection, semanticError, semanticWarning, glassPanel, zInCard, zSticky, zPopover } from '../utils/statsTheme'
 
 /**
@@ -638,8 +639,7 @@ export default function EventsView({ events, members, memberConstraints, roleCol
                 // Past events (date strictly before today) are muted. Parse the
                 // event date at LOCAL midnight so the comparison is day-granular
                 // and timezone-safe (event.date is a YYYY-MM-DD string).
-                const [ey, em, ed] = event.date.split('-').map(Number)
-                const isPast = new Date(ey, em - 1, ed) < todayStart
+                const isPast = parseDayKey(event.date) < todayStart
                 
                 return (
                 <div key={eventIdx} data-event-date={event.date} className={`relative h-full flex flex-col ${overlayEventKey === eventKey || addRoleFor === event.date ? zPopover : ''} ${glassPanel} p-3 transition-colors ${isPast ? 'opacity-50' : ''}`}>
