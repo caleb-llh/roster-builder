@@ -24,16 +24,16 @@ function App({ auth }) {
   const [searchQuery, setSearchQuery] = useState('')
   const [showDrawer, setShowDrawer] = useState(false)
   const [showAdmin, setShowAdmin] = useState(false)
-  const [activeTab, setActiveTab] = useState('events') // mobile-only: 'events' | 'members'
+  const [activeTab, setActiveTab] = useState('events') // 'events' | 'members' (one shown at a time, all breakpoints)
   const [showAlgorithmModal, setShowAlgorithmModal] = useState(false)
   const [generationNotice, setGenerationNotice] = useState(null) // transient neutral toast after generating
   // Height of the pinned "unsaved changes" bar, so other sticky toolbars (the
   // Events select bar) can offset below it instead of being obstructed.
   const draftBarRef = useRef(null)
   const [draftBarHeight, setDraftBarHeight] = useState(0)
-  // Mobile tab switcher: also sticky, pinned below the draft bar. Measured so
-  // the (further-down) select toolbar can clear BOTH bars. On desktop the tab
-  // bar is `lg:hidden` → offsetHeight 0, so this contributes nothing there.
+  // Tab switcher: also sticky, pinned below the draft bar. Measured so the
+  // (further-down) select toolbar can clear BOTH bars. Shown at every
+  // breakpoint (Events/Members are separate tabs, never side-by-side).
   const tabBarRef = useRef(null)
   const [tabBarHeight, setTabBarHeight] = useState(0)
   const [swapNotice, setSwapNotice] = useState(null)
@@ -275,8 +275,8 @@ function App({ auth }) {
     return () => ro.disconnect()
   }, [hasUncommitted, permissions.canEditRoster, showChanges])
 
-  // Measure the mobile tab switcher (see tabBarHeight above). Observed always;
-  // ResizeObserver reports 0 while it is `lg:hidden` (display:none) on desktop.
+  // Measure the tab switcher (see tabBarHeight above). Shown at all
+  // breakpoints, so it always contributes its height.
   useLayoutEffect(() => {
     const el = tabBarRef.current
     if (!el) {
@@ -721,10 +721,11 @@ function App({ auth }) {
         </div>
       )}
 
-      {/* Mobile tab switcher (hidden on lg where both panels show side-by-side).
+      {/* Tab switcher: Events / Members are shown one at a time at every
+          breakpoint (the "separate by default" layout — no side-by-side split).
           Pins BELOW the draft bar (offset by its measured height) so the two
           sticky bars stack instead of overlapping. */}
-      <div ref={tabBarRef} className={`lg:hidden sticky ${zSticky} flex bg-white/70 backdrop-blur-md border-b border-gray-200`} style={{ top: draftBarHeight }}>
+      <div ref={tabBarRef} className={`sticky ${zSticky} flex bg-white/70 backdrop-blur-md border-b border-gray-200`} style={{ top: draftBarHeight }}>
         <button
           onClick={() => setActiveTab('events')}
           className={`flex-1 py-3 text-sm font-semibold transition-colors touch-manipulation ${activeTab === 'events' ? tabActive : tabInactive}`}
@@ -739,10 +740,11 @@ function App({ auth }) {
         </button>
       </div>
 
-      {/* Split View Container */}
-      <div className="flex flex-col lg:flex-row pb-24 lg:pb-safe">
+      {/* Tabbed view container: only the active tab's panel is shown, at every
+          breakpoint (no lg side-by-side split). */}
+      <div className="flex flex-col pb-24 lg:pb-safe">
         {/* Events Section */}
-        <div className={`${activeTab === 'events' ? 'block' : 'hidden'} lg:block w-full lg:w-7/12 lg:border-r border-gray-200`}>
+        <div className={`${activeTab === 'events' ? 'block' : 'hidden'} w-full`}>
           <EventsView 
             events={events}
             members={members}
@@ -771,7 +773,7 @@ function App({ auth }) {
         </div>
 
         {/* Members Section */}
-        <div className={`${activeTab === 'members' ? 'block' : 'hidden'} lg:block w-full lg:w-5/12 pb-4 lg:pb-0`}>
+        <div className={`${activeTab === 'members' ? 'block' : 'hidden'} w-full pb-4`}>
           <MembersView 
             members={members}
             roles={roles}
