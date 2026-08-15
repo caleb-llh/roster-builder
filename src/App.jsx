@@ -7,7 +7,7 @@ import { getDerivedState } from './utils/derivedState'
 import { computeRosterDiff } from './utils/rosterDiff'
 import { computeAvailabilityByRole } from './utils/availabilityUtils'
 import { useRosterData } from './hooks/useRosterData'
-import { canSwapRosterSlots } from './utils/constraintsUtils'
+import { explainSwap } from './utils/constraintsUtils'
 import { buildBulkClear } from './utils/bulkClear'
 import { getActiveConstraints, getActivePreferences, getConstraintDescription, getPreferenceDescription, MEMBER_PREF_FIELDS } from './schema/rosterSchema'
 import { ErrorDisplay, GlassFab, HoverCard } from './components/SharedComponents'
@@ -394,16 +394,14 @@ function App({ auth }) {
     const memberB = slotB.member_id || null
     if (!memberA && !memberB) return
 
-    const isValid = canSwapRosterSlots({
+    const { ok, reason } = explainSwap({
       memberA, memberB, eventA, eventB,
       sourceIndex: source.roleIndex, targetIndex: target.roleIndex,
       slotA, slotB, members, memberConstraints, allEvents: events,
     })
 
-    if (!isValid) {
-      setSwapNotice(
-        `Invalid swap: ${nameOf(memberA)} ↔ ${nameOf(memberB)} would break role, availability, or once-per-event rules.`
-      )
+    if (!ok) {
+      setSwapNotice(reason || 'Invalid swap.')
       setTimeout(() => setSwapNotice(null), 3000)
       return
     }

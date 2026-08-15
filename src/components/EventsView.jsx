@@ -10,7 +10,7 @@ import { parseDayKey } from '../utils/calendarUtils'
 import { headingPage, glassMenu, glassCard, hoverRow, tierSection, semanticError, semanticWarning, glassPanel, zInCard, zSticky, zPopover } from '../utils/statsTheme'
 
 /**
- * Status accent for an event card: a coloured top-left CORNER wedge, replacing
+ * Status accent for an event card: a coloured top-right CORNER wedge, replacing
  * the old full-height left border. The wedge **clips itself** (its own
  * `overflow-hidden` box) rather than relying on the parent card clipping it, so
  * the card can stay overflow-visible and let inline dropdowns (the assignment
@@ -22,11 +22,11 @@ function StatusCorner({ level }) {
   const wedge = isError ? 'bg-red-400/80' : 'bg-amber-400/80'
   const label = isError ? 'Has errors' : 'Has warnings'
   return (
-    <div className="pointer-events-none absolute left-0 top-0 z-[1] h-7 w-7 overflow-hidden rounded-tl-lg" aria-hidden="true" title={label}>
-      {/* Rotated square offset up-left → its lower-right half shows as a
+    <div className="pointer-events-none absolute right-0 top-0 z-[1] h-7 w-7 overflow-hidden rounded-tr-lg" aria-hidden="true" title={label}>
+      {/* Rotated square offset up-right → its lower-left half shows as a
           triangle hugging the corner (clipped by THIS box's overflow-hidden,
           not the card's). */}
-      <div className={`absolute -left-4 -top-4 h-8 w-8 rotate-45 ${wedge}`} />
+      <div className={`absolute -right-4 -top-4 h-8 w-8 rotate-45 ${wedge}`} />
     </div>
   )
 }
