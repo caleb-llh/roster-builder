@@ -690,21 +690,6 @@ function App({ auth }) {
                 <span className={`inline-block transition-transform ${showChanges ? 'rotate-90' : ''}`}>▸</span>
                 {rosterDiff.slotChanges.length} unsaved change{rosterDiff.slotChanges.length === 1 ? '' : 's'}
               </button>
-              {(rosterDiff.affectedMemberIds.added.length > 0 || rosterDiff.affectedMemberIds.removed.length > 0) && (
-                <span className="ml-2 text-amber-800">
-                  {rosterDiff.affectedMemberIds.added.length > 0 && (
-                    <span title="Newly on the roster">
-                      +{rosterDiff.affectedMemberIds.added.map(id => members.find(m => m.id === id)?.name || id).join(', ')}
-                    </span>
-                  )}
-                  {rosterDiff.affectedMemberIds.added.length > 0 && rosterDiff.affectedMemberIds.removed.length > 0 && ' · '}
-                  {rosterDiff.affectedMemberIds.removed.length > 0 && (
-                    <span title="No longer on the roster">
-                      −{rosterDiff.affectedMemberIds.removed.map(id => members.find(m => m.id === id)?.name || id).join(', ')}
-                    </span>
-                  )}
-                </span>
-              )}
             </div>
             <div className="flex items-center gap-2 shrink-0">
               <button
