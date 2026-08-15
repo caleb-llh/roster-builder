@@ -139,7 +139,7 @@ export default function QualityMetrics({ generationResult, members, stats, showR
                   </div>
                 ))}
             </div>
-            <p className={`${helperText} mt-2`}>
+            <p className={`${helperText} mt-2 pb-2`}>
               Distinct members ÷ shifts per role. Fuller bars mean the role rotates through more people.
             </p>
           </div>

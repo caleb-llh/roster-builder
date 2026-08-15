@@ -5,6 +5,7 @@ import { validateEventAssignments } from './utils/assignmentValidator'
 import { generateRoster } from './utils/rosterGenerator'
 import { getDerivedState } from './utils/derivedState'
 import { computeRosterDiff } from './utils/rosterDiff'
+import { computeAvailabilityByRole } from './utils/availabilityUtils'
 import { useRosterData } from './hooks/useRosterData'
 import { canSwapRosterSlots } from './utils/constraintsUtils'
 import { buildBulkClear } from './utils/bulkClear'
@@ -100,6 +101,9 @@ function App({ auth }) {
 
   const roleColorMap = createRoleColorMap(roles)
   const rosterStats = calculateRosterStats(events, members, rosterPeriod, memberConstraints, rosterConstraints)
+  // Members available per real role at each event date (role-capable AND free);
+  // feeds the availability line chart in the stats panel.
+  const availabilityByRole = computeAvailabilityByRole(events, members, roles, memberConstraints)
   
   // Validate event assignments
   const validationResults = validateEventAssignments(
@@ -638,7 +642,7 @@ function App({ auth }) {
           
           {/* Roster Statistics */}
           <div className="mt-3 sm:mt-4">
-            <RosterStatsPanel stats={rosterStats} members={members} actionLog={actionLog} />
+            <RosterStatsPanel stats={rosterStats} members={members} actionLog={actionLog} availability={availabilityByRole} />
           </div>
           
           {/* Shared Search Bar */}

@@ -4,15 +4,16 @@
 - [x] time to refactor the README? have a separate specs/ folder to store the binding specs. include one on system architecture, especially those whose context is not captured in this repo. Keep README as a high-level product introduction (target audience: product managers). Have a contributing md file to onboard new developers, and orientate on the AI-assisted developer workflow, don't duplicate information from AGENTS.md or specs in order to keep the segregation of concerns neat.
 - [x] make sure the data model is tracked in the specs
 - [x] make sure the permissions model is tracked in the specs
-- [ ] can the migration scripts be squashed?
-- [ ] playwright scripts?
+- [ ] document user flow in readme
 - [ ] is design system sufficient? is current linter sufficient to ensure compliance?
 - [ ] dev containers for integration testing?
-- [ ] make sure specs (context) and test cases (compliance) are updated (if applicable - [ ] how to define applicable to reduce bloat yet capture all essential information?) for each change.
+- [ ] make sure specs (context) and test cases (compliance) are updated (if applicable - how to define applicable to reduce bloat yet capture all essential information?) for each change.
+- [ ] can the migration scripts be squashed?
+- [ ] playwright scripts?
 
 **system architecture**
-- [ ] staging environment
-- [ ] vercel deployment with supabase backend - [ ] is it better than current setup?
+- [ ] staging environment?
+- [ ] vercel deployment with supabase backend - is it better than current setup?
 - [ ] telegram integration - mini app, auth, reminders bot.
 - [ ] traffic whitelisting/bot prevention
 - [ ] monitoring stack - availability, billing
@@ -22,13 +23,14 @@
 - [x] Remove the tables view and clean up
 - [x] clean UI (glassmorphism, light gradient/monochromatic colours, thin capitalized fonts)
 - [x] any other suggestions for the overall UI to keep things more clean and consistent?
+- [x] keep members and events tab separate as default, regardless of desktop or mobile
 - [ ] mobile-first experience - single pane of glass for to view roster and plan swaps (these are the core user experiences)
 
 **domain modelling**
-- [ ] introuce teams concept, clean up yaml
+- [ ] introuce tenant and teams concept, clean up yaml. each tenant can have multiple teams, each team can have multiple members. members can be cross-team, constraints need to be cross-team aware too.
 - [ ] is the current schema enforcement too complicated
-- [ ] yaml only for local, no yaml for production. reuse core but separate state providers - [ ] local and production should still share the same data models
-- [ ] tables: users, roster, teams, events, members, member_preferences, member_constraints - [ ] did i miss any?
+- [ ] yaml only for local, no yaml for production. reuse core but separate state providers - local and production should still share the same data models
+- [ ] tables: users, roster, teams, events, members, member_preferences, member_constraints - did i miss any?
 - [ ] draw the relations
 - [ ] is this scalable?
 - [ ] multi-version support integrated into the draft and save concept? what would be the workflow and how will the underlying data structure change?
@@ -48,7 +50,7 @@
 
 **roster analytics**
 - [x] declutter roster statistics panel, remove the unnecessary info
-- [ ] members availability chart
+- [x] members availability chart
 
 **onboarding process**
 - [ ] team leaders

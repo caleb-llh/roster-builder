@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import QualityMetrics from './QualityMetrics'
+import { AvailabilityHeatmap } from '../utils/distributionUtils'
 import { formatEntry } from '../utils/rosterGenerator/actionLog'
 import { tierTitle, tierLabel, tierSection, tierUnit, helperText, glassPanel, glassCard, semanticError, monoChip } from '../utils/statsTheme'
 
@@ -21,7 +22,7 @@ const CATEGORY_STYLE = {
   insert: 'bg-emerald-100 text-emerald-700',
 }
 
-export default function RosterStatsPanel({ stats, members, actionLog = [] }) {
+export default function RosterStatsPanel({ stats, members, actionLog = [], availability = null }) {
   const [showDetails, setShowDetails] = useState(false)
 
   if (!stats || stats.totalSlots === 0) {
@@ -91,6 +92,18 @@ export default function RosterStatsPanel({ stats, members, actionLog = [] }) {
           object built from the live stats purely to match its prop contract. */}
       {showDetails && (
         <div className="border-t border-gray-200 pt-3">
+          {/* Members-available vs. required per role over time. Cell colour =
+              coverage on a roster-normalized scale (red = short/exactly-enough;
+              slate ramp = this roster's low→high coverage). Placed above the
+              QualityMetrics sections (Shift Distribution etc.) as the first
+              detail. Read-only insight; not tied to generation. */}
+          {availability && availability.series.length > 0 && (
+            <div className="mb-4">
+              <div className={`${tierSection} mb-3`}>Member Availability</div>
+              <AvailabilityHeatmap data={availability} />
+            </div>
+          )}
+
           <QualityMetrics
             generationResult={{
               fairnessMetrics: stats.fairnessMetrics,
