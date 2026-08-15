@@ -367,6 +367,11 @@ export default function EventsView({ events, members, memberConstraints, roleCol
   // aren't part of the base catalog).
   const addableRoleOptions = allRoles.flatMap(role => [role, understudySlotRole(role)])
 
+  // Local midnight today, computed once per render, so past events (whose date
+  // is strictly before today) can be muted. Same-day events are NOT past.
+  const todayStart = new Date()
+  todayStart.setHours(0, 0, 0, 0)
+
   // Color class for a role tag; understudy slots reuse their base role's color
   // since they aren't in the base color map.
   const roleColor = (role) =>
@@ -630,9 +635,14 @@ export default function EventsView({ events, members, memberConstraints, roleCol
                 const dayOfWeek = eventDate.getDay()
                 const dayLabelColor = getCardColorForDay(dayOfWeek)
                 const statusLevel = hasErrors ? 'error' : hasWarnings ? 'warning' : null
+                // Past events (date strictly before today) are muted. Parse the
+                // event date at LOCAL midnight so the comparison is day-granular
+                // and timezone-safe (event.date is a YYYY-MM-DD string).
+                const [ey, em, ed] = event.date.split('-').map(Number)
+                const isPast = new Date(ey, em - 1, ed) < todayStart
                 
                 return (
-                <div key={eventIdx} className={`relative h-full flex flex-col ${overlayEventKey === eventKey || addRoleFor === event.date ? zPopover : ''} ${glassPanel} p-3 transition-colors`}>
+                <div key={eventIdx} data-event-date={event.date} className={`relative h-full flex flex-col ${overlayEventKey === eventKey || addRoleFor === event.date ? zPopover : ''} ${glassPanel} p-3 transition-colors ${isPast ? 'opacity-50' : ''}`}>
                   {statusLevel && <StatusCorner level={statusLevel} />}
                   <div className="mb-3">
                     <div className="text-xl font-bold text-gray-900 mb-1 flex items-center gap-2">

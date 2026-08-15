@@ -33,6 +33,10 @@ The CSV / "Copy to Excel" exports use the shared column layout (`exportColumnLay
 
 Clicking Auto generates straight into the draft; there is **no pre-generation confirmation dialog** and **no post-generation result modal** (the old `GenerationResultModal` was removed). Feedback is the transient toast (what this run filled — see [design-system.md](design-system.md)) plus the live stats panel and inline diff dots. Rationale: generation is **undoable** (it lands in the draft, behind Save, and on the undo stack), so a modal gate added friction to a reversible action; the algorithm explainer is available on demand from the FAB hover card for users who want the details before running.
 
+## Past events are muted (relative to today)
+
+An event card whose date is **strictly before today** is dimmed (`opacity-50`) so the eye is drawn to upcoming events. "Today" is read at **render time** from the client clock (local midnight), so the muting reflects the actual current date without any stored state — reload on a new day and yesterday's events dim automatically. The comparison is **day-granular**: a same-day event is *not* past (it stays full-opacity through the day it happens). The event date is parsed at **local** midnight from its `YYYY-MM-DD` parts (not `new Date(str)`, which is UTC) so the boundary can't slip a day in a negative-offset timezone — the same parsing invariant used by the member-availability calendar (see [design-system.md](design-system.md)).
+
 ## Member-availability heatmap (roster stats)
 
 The roster-stats panel's Details section shows a **role × event-date availability heatmap** (`AvailabilityHeatmap` in `distributionUtils.jsx`, fed by the pure `computeAvailabilityByRole` in `availabilityUtils.js`, unit-tested). It is rendered **first in the Details section — above `QualityMetrics` (Shift Distribution etc.)** — since "can I field these dates at all" is the primary planning question. Binding semantics:

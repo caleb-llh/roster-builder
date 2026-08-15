@@ -25,7 +25,7 @@
 - [x] any other suggestions for the overall UI to keep things more clean and consistent?
 - [x] keep members and events tab separate as default, regardless of desktop or mobile
 - [x] make the events card member's availability dropdown more aligned to the theme
-- [ ] FAB to scroll to top
+- [x] FAB to scroll to top
 - [ ] table and cards view toggle (inspired by notion)
 - [ ] mobile-first experience - single pane of glass for to view roster and plan swaps (these are the core user experiences)
 
@@ -47,6 +47,7 @@
 - [x] i intend to add a multi-select of event assignments and bulk delete for them. how to quickly select all? some box-drawing?
 - [x] calendar view for member availability
 - [ ] When a swap fails, does the existing logic support a more descriptive error message on the toast? instead of just a generic invalid statement.
+- [ ] everything about the members should be editable. make sure the design style is consistent with the rest of the UI. clarify if needed.
 
 **roster validation/algorithm**
 - [x] clean up roster generation info modal "how roster generation works", clicking the generate button should trigger the generation process immediately since we can undo it. generation results modal can be removed if the roster statistics already does the job.

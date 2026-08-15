@@ -28,6 +28,7 @@ function App({ auth }) {
   const [activeTab, setActiveTab] = useState('events') // 'events' | 'members' (one shown at a time, all breakpoints)
   const [showAlgorithmModal, setShowAlgorithmModal] = useState(false)
   const [generationNotice, setGenerationNotice] = useState(null) // transient neutral toast after generating
+  const [showScrollTop, setShowScrollTop] = useState(false) // scroll-to-top FAB, shown once the page is scrolled down
   // Height of the pinned "unsaved changes" bar, so other sticky toolbars (the
   // Events select bar) can offset below it instead of being obstructed.
   const draftBarRef = useRef(null)
@@ -262,6 +263,35 @@ function App({ auth }) {
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [permissions.canUndo, undo, redo])
+
+  // Track whether the page is scrolled down (past ~half a viewport). The FAB is
+  // always shown; when scrolled down it scrolls to top, and when at the top it
+  // becomes a "scroll to today" jump. The page scrolls on the window
+  // (min-h-screen, no inner scroll container).
+  useEffect(() => {
+    const onScroll = () => setShowScrollTop(window.scrollY > window.innerHeight * 0.5)
+    onScroll()
+    window.addEventListener('scroll', onScroll, { passive: true })
+    return () => window.removeEventListener('scroll', onScroll)
+  }, [])
+
+  const scrollToTop = () => window.scrollTo({ top: 0, behavior: 'smooth' })
+
+  // Jump to the first event on or after today. Event cards carry a
+  // `data-event-date` (YYYY-MM-DD) attribute; we pick the earliest one that is
+  // not in the past (string compare works for zero-padded ISO dates). Falls
+  // back to the last card if every event is in the past. We scroll manually
+  // (not scrollIntoView) so we can offset by the sticky header stack (draft bar
+  // + tab bar) and leave a small gap, instead of the card hiding behind them.
+  const scrollToToday = () => {
+    const cards = [...document.querySelectorAll('[data-event-date]')]
+    if (cards.length === 0) return
+    const todayKey = new Date().toLocaleDateString('en-CA') // YYYY-MM-DD, local
+    const target = cards.find(el => el.dataset.eventDate >= todayKey) || cards[cards.length - 1]
+    const stickyOffset = draftBarHeight + tabBarHeight + 12 // + small breathing gap
+    const top = target.getBoundingClientRect().top + window.scrollY - stickyOffset
+    window.scrollTo({ top: Math.max(0, top), behavior: 'smooth' })
+  }
 
   // Measure the pinned draft bar so sticky toolbars below it (the Events select
   // bar) can offset by its height instead of being hidden behind it. Re-measures
@@ -837,6 +867,27 @@ function App({ auth }) {
               {'{ }'}
             </GlassFab>
           )}
+          {showScrollTop ? (
+            <GlassFab
+              onClick={scrollToTop}
+              className="h-12 w-12"
+              title="Scroll to top"
+            >
+              <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5 15l7-7 7 7" />
+              </svg>
+            </GlassFab>
+          ) : activeTab === 'events' ? (
+            <GlassFab
+              onClick={scrollToToday}
+              className="h-12 w-12"
+              title="Jump to today"
+            >
+              <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
+            </GlassFab>
+          ) : null}
         </div>
       )}
 
