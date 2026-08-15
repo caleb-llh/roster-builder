@@ -24,6 +24,7 @@ understudy feature, re-read the relevant file below.
 | [understudy.md](understudy.md) | The understudy/promotion feature end-to-end: the model, the two role-capability rules that must not be conflated, hard constraints, the promotion-aware seeding and backtracking-planner phases, and the manual-assignment/validation mirrors. |
 | [design-system.md](design-system.md) | The look-and-feel spec: the `statsTheme.js` token module, the named z-index scale, the `HoverCard` popup primitive, sticky-chrome stacking, the colour policy, the no-emoji rule, and the UI's calibrated typographic decisions. |
 | [events-ui.md](events-ui.md) | Events-view interaction spec: bulk-clear semantics + how select mode is entered, the three selection scales, why there's no drag-marquee, export column order, manual swap validation, and why generation runs immediately with no confirm gate/result modal. |
+| [multi-tenant.md](multi-tenant.md) | **PLANNING (not built).** Target design for the tenant → team → roster hierarchy, tenant-level member registry, cross-team-aware constraints (global unavailability, cross-team caps, clash detection, per-team overrides), the compatibility seam that keeps the generation engine unchanged, a feature-by-feature impact analysis, and the phased delivery plan. |
 
 ## How to read a Design Decision
 
