@@ -6,7 +6,7 @@ import RosterSlotPill from './RosterSlotPill'
 import { IssueSummary } from './SharedComponents'
 import { understudySlotRole, isUnderstudyRole, baseRoleOf } from '../utils/understudy'
 import { slotKey } from '../utils/bulkClear'
-import { headingPage, glassMenu, hoverRow, tierSection, semanticError, semanticWarning, glassPanel, zInCard, zSticky, zPopover } from '../utils/statsTheme'
+import { headingPage, glassMenu, glassCard, hoverRow, tierSection, semanticError, semanticWarning, glassPanel, zInCard, zSticky, zPopover } from '../utils/statsTheme'
 
 /**
  * Status accent for an event card: a coloured top-left CORNER wedge, replacing
@@ -699,8 +699,11 @@ export default function EventsView({ events, members, memberConstraints, roleCol
 
                         {/* Add-role control */}
                         {onAddRosterSlot && (() => {
-                          const usedRoles = new Set((event.roster || []).map(r => r.role))
-                          const addableRoles = addableRoleOptions.filter(r => !usedRoles.has(r))
+                          // A role may be added more than once: the roster is a
+                          // positional array, so duplicate roles (e.g. two
+                          // `roving-cam`) are first-class. We therefore do NOT
+                          // filter out already-used roles.
+                          const addableRoles = addableRoleOptions
                           const isOpen = addRoleFor === event.date
                           return (
                             <div className="relative inline-flex" ref={isOpen ? addRoleRef : undefined}>
@@ -709,7 +712,7 @@ export default function EventsView({ events, members, memberConstraints, roleCol
                                 onClick={() => setAddRoleFor(isOpen ? null : event.date)}
                                 disabled={addableRoles.length === 0}
                                 className={`inline-flex w-fit items-center rounded-full border border-dashed px-2 py-0.5 text-xs transition-colors touch-manipulation ${addableRoles.length === 0 ? 'cursor-default border-gray-300 text-gray-300' : 'border-gray-400 bg-white/40 text-gray-500 hover:border-gray-600 hover:text-gray-800'}`}
-                                title={addableRoles.length === 0 ? 'All roles already added' : 'Add a role to this event'}
+                                title={addableRoles.length === 0 ? 'No roles defined' : 'Add a role to this event'}
                               >
                                 + Role
                               </button>
@@ -733,9 +736,20 @@ export default function EventsView({ events, members, memberConstraints, roleCol
                       </div>
                     </div>
                   )}
-                  
+
+                  {/* Reminder — part of the original event config, so it sits with
+                      the roster (no divider) above the derived sections below. */}
+                  {event.reminder && (
+                    <div className="mt-2 text-xs text-gray-600 bg-gray-100/70 px-2 py-1.5 rounded border border-gray-200/60">
+                      {event.reminder}
+                    </div>
+                  )}
+
+                  {/* Derived sections (availability + validation) are NOT part of
+                      the original event configuration, so a single divider marks
+                      the boundary from the config above. */}
                   {/* Availability Details Dropdown */}
-                  <div className="mt-2 pt-2 border-t border-gray-200">
+                  <div className="mt-3 pt-3 border-t border-gray-200">
                     <button
                       onClick={() => setExpandedEvent(isExpanded ? null : eventKey)}
                       className="text-xs text-gray-600 hover:text-gray-800 font-medium flex items-center gap-1 w-full"
@@ -743,30 +757,32 @@ export default function EventsView({ events, members, memberConstraints, roleCol
                       {isExpanded ? '▼' : '▶'} Availability Details
                     </button>
                     {isExpanded && (
-                      <div className="mt-2 pt-2 border-t border-gray-200 space-y-2">
+                      <div className={`mt-2 p-3 columns-1 sm:columns-2 gap-x-6 ${glassCard}`}>
                         {Object.entries(availabilityData).map(([role, memberList]) => (
-                          <div key={role} className="text-xs">
-                            <div className={`font-semibold mb-1 inline-block ${roleColorMap[role]}`}>
+                          <div key={role} className="text-xs min-w-0 mb-4 break-inside-avoid">
+                            <div className={`mb-1.5 inline-flex items-center rounded border border-gray-200/70 bg-white/30 px-1.5 py-0.5 text-xs font-medium ${roleColor(role)}`}>
                               {role}
                             </div>
-                            <div className="ml-2 space-y-0.5">
+                            <div className="space-y-0.5">
                               {memberList.length === 0 ? (
-                                <div className="text-gray-500 italic">No qualified members</div>
+                                <div className="text-gray-400 italic">No qualified members</div>
                               ) : (
                                 memberList.map(member => (
-                                  <div 
-                                    key={member.id} 
-                                    className={`flex items-center gap-1 ${
-                                      member.available 
-                                        ? 'text-gray-700' 
-                                        : 'text-red-600 line-through'
+                                  <div
+                                    key={member.id}
+                                    className={`flex items-center gap-1.5 rounded px-1 py-0.5 ${
+                                      member.assigned ? 'font-medium text-emerald-600' : member.available ? 'text-gray-700' : 'text-gray-300'
                                     }`}
                                   >
-                                    <span>{member.available ? '✓' : '✗'}</span>
-                                    <span>{member.name}</span>
-                                    {member.assigned && (
-                                      <span className="ml-auto text-gray-700 font-semibold">★</span>
-                                    )}
+                                    <span
+                                      className={`w-3 shrink-0 text-center ${
+                                        member.assigned ? 'font-bold text-emerald-600' : member.available ? 'text-gray-400' : 'text-gray-300'
+                                      }`}
+                                      title={member.assigned ? 'Assigned to this event' : undefined}
+                                    >
+                                      {member.available ? '✓' : '✗'}
+                                    </span>
+                                    <span className="truncate">{member.name}</span>
                                   </div>
                                 ))
                               )}
@@ -777,9 +793,12 @@ export default function EventsView({ events, members, memberConstraints, roleCol
                     )}
                   </div>
                   
-                  {/* Validation Messages */}
+                  {/* Validation Messages — derived, and kept last so the
+                      computed errors/warnings sit at the very bottom of the
+                      card. No divider: it's within the same derived group as
+                      the availability section above it. */}
                   {(hasErrors || hasWarnings) && (
-                    <div className="mt-2 pt-2 border-t border-gray-300 space-y-1">
+                    <div className="mt-2 space-y-1">
                       {validation.errors.map((error, idx) => (
                         <div key={`error-${idx}`} className={`text-xs px-2 py-1.5 rounded ${semanticError}`}>
                           <span className="font-semibold">Error:</span> {error}
@@ -790,12 +809,6 @@ export default function EventsView({ events, members, memberConstraints, roleCol
                           <span className="font-semibold">Warning:</span> {warning}
                         </div>
                       ))}
-                    </div>
-                  )}
-                  
-                  {event.reminder && (
-                    <div className="mt-2 text-xs text-gray-600 bg-gray-100/70 px-2 py-1.5 rounded border border-gray-200/60">
-                      {event.reminder}
                     </div>
                   )}
                 </div>

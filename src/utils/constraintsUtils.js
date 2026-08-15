@@ -51,8 +51,22 @@ export const getAvailableMembersForEvent = (event, members, constraints, allEven
   const events = allEvents || [event]
   const availabilityByRole = {}
 
+  // A role may appear in more than one slot of the same event (the roster is a
+  // positional array, so duplicate roles are legal — e.g. two `roving-cam`).
+  // Availability for a role is the SAME regardless of how many slots it has, so
+  // we key by role name and compute it once. But "assigned" must reflect ANY
+  // slot of that role: pre-index the member_ids assigned to each role so a
+  // member covering the first of two duplicate slots is still marked assigned
+  // (previously the last slot's assignment overwrote the earlier one).
+  const assignedIdsByRole = {}
+  event.roster.forEach(assignment => {
+    if (!assignment.member_id) return
+    ;(assignedIdsByRole[assignment.role] ||= new Set()).add(assignment.member_id)
+  })
+
   event.roster.forEach(assignment => {
     const role = assignment.role
+    if (availabilityByRole[role]) return // already computed for this role
 
     // Who can fill this slot?
     //  - Full performers / trainees for understudy slots: canFillSlotRole.
@@ -67,12 +81,14 @@ export const getAvailableMembersForEvent = (event, members, constraints, allEven
       return false
     })
 
+    const assignedIds = assignedIdsByRole[role] || new Set()
+
     // Check availability for each qualified member
     const availability = qualifiedMembers.map(member => ({
       id: member.id,
       name: member.name,
       available: !isMemberUnavailable(member.id, event.date, constraints),
-      assigned: assignment.member_id === member.id,
+      assigned: assignedIds.has(member.id),
       // Mark trainees being promoted into a real role so the UI can label them.
       isUnderstudy: !isUnderstudyRole(role) && !(member.roles || []).includes(role),
     }))

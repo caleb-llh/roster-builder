@@ -136,6 +136,32 @@ describe('constraintsUtils', () => {
       expect(result).toEqual({})
     })
 
+    describe('duplicate roles in one event', () => {
+      // The roster is a positional array, so the same role can occupy more than
+      // one slot (e.g. two 'vm'). Availability is per-role (identical for every
+      // slot of that role), but 'assigned' must reflect ANY slot's occupant.
+      const dupEvent = {
+        date: '2026-03-01',
+        roster: [
+          { role: 'vm', member_id: 'john' },
+          { role: 'vm', member_id: 'jane' },
+        ],
+      }
+
+      it('lists the duplicated role once (availability is per-role)', () => {
+        const result = getAvailableMembersForEvent(dupEvent, members, [])
+        expect(Object.keys(result)).toEqual(['vm'])
+      })
+
+      it('marks EVERY occupant of the duplicated role as assigned', () => {
+        const result = getAvailableMembersForEvent(dupEvent, members, [])
+        // Regression: previously the last slot overwrote the first, so only
+        // Jane showed assigned. Both must now be marked.
+        expect(result.vm.find(m => m.id === 'john').assigned).toBe(true)
+        expect(result.vm.find(m => m.id === 'jane').assigned).toBe(true)
+      })
+    })
+
     describe('promoted understudies in real-role slots', () => {
       const uMembers = [
         { id: 'perf', name: 'Perf', roles: ['multi-vm'], understudyFor: [] },

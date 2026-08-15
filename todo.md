@@ -24,6 +24,9 @@
 - [x] clean UI (glassmorphism, light gradient/monochromatic colours, thin capitalized fonts)
 - [x] any other suggestions for the overall UI to keep things more clean and consistent?
 - [x] keep members and events tab separate as default, regardless of desktop or mobile
+- [ ] FAB to scroll to top
+- [ ] make the events card member's availability dropdown more aligned to the theme
+- [ ] table view (inspired by notion)
 - [ ] mobile-first experience - single pane of glass for to view roster and plan swaps (these are the core user experiences)
 
 **domain modelling**
