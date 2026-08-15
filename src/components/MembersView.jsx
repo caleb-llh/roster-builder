@@ -59,13 +59,6 @@ export default function MembersView({ members, roles, roleColorMap, warnings, se
         ))}
       </div>
 
-      {/* Results Info */}
-      <div className="mb-4 text-sm text-gray-600">
-        Showing {filteredMembers.length} member{filteredMembers.length !== 1 ? 's' : ''}
-        {selectedRole !== 'All' && ` with ${selectedRole} role`}
-        {searchQuery && ` matching "${searchQuery}"`}
-      </div>
-
       {/* Member Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
         {filteredMembers.map((member, i) => (

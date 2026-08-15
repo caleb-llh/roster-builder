@@ -632,7 +632,7 @@ export default function EventsView({ events, members, memberConstraints, roleCol
                 const statusLevel = hasErrors ? 'error' : hasWarnings ? 'warning' : null
                 
                 return (
-                <div key={eventIdx} className={`relative ${overlayEventKey === eventKey || addRoleFor === event.date ? zPopover : ''} ${glassPanel} p-3 transition-colors`}>
+                <div key={eventIdx} className={`relative h-full flex flex-col ${overlayEventKey === eventKey || addRoleFor === event.date ? zPopover : ''} ${glassPanel} p-3 transition-colors`}>
                   {statusLevel && <StatusCorner level={statusLevel} />}
                   <div className="mb-3">
                     <div className="text-xl font-bold text-gray-900 mb-1 flex items-center gap-2">
@@ -745,14 +745,16 @@ export default function EventsView({ events, members, memberConstraints, roleCol
                     </div>
                   )}
 
-                  {/* Derived sections (availability + validation) are NOT part of
-                      the original event configuration, so a single divider marks
-                      the boundary from the config above. */}
-                  {/* Availability Details Dropdown */}
-                  <div className="mt-3 pt-3 border-t border-gray-200">
+                  {/* Derived sections (availability + validation) are NOT part
+                      of the original event configuration. They're wrapped in a
+                      single mt-auto group so (a) one divider marks the config →
+                      derived boundary and (b) the group flushes to the BOTTOM of
+                      the card, aligning across the equal-height grid row. */}
+                  <div className="mt-auto pt-3 border-t border-gray-200">
+                    {/* Availability Details Dropdown */}
                     <button
                       onClick={() => setExpandedEvent(isExpanded ? null : eventKey)}
-                      className="text-xs text-gray-600 hover:text-gray-800 font-medium flex items-center gap-1 w-full"
+                      className={`flex items-center gap-1 w-full ${tierSection} hover:text-gray-700`}
                     >
                       {isExpanded ? '▼' : '▶'} Availability Details
                     </button>
@@ -791,26 +793,25 @@ export default function EventsView({ events, members, memberConstraints, roleCol
                         ))}
                       </div>
                     )}
+
+                    {/* Validation Messages — derived, kept last so the computed
+                        errors/warnings sit at the very bottom. No divider: same
+                        derived group as the availability section above it. */}
+                    {(hasErrors || hasWarnings) && (
+                      <div className="mt-2 space-y-1">
+                        {validation.errors.map((error, idx) => (
+                          <div key={`error-${idx}`} className={`text-xs px-2 py-1.5 rounded ${semanticError}`}>
+                            <span className="font-semibold">Error:</span> {error}
+                          </div>
+                        ))}
+                        {validation.warnings.map((warning, idx) => (
+                          <div key={`warning-${idx}`} className={`text-xs px-2 py-1.5 rounded ${semanticWarning}`}>
+                            <span className="font-semibold">Warning:</span> {warning}
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                  
-                  {/* Validation Messages — derived, and kept last so the
-                      computed errors/warnings sit at the very bottom of the
-                      card. No divider: it's within the same derived group as
-                      the availability section above it. */}
-                  {(hasErrors || hasWarnings) && (
-                    <div className="mt-2 space-y-1">
-                      {validation.errors.map((error, idx) => (
-                        <div key={`error-${idx}`} className={`text-xs px-2 py-1.5 rounded ${semanticError}`}>
-                          <span className="font-semibold">Error:</span> {error}
-                        </div>
-                      ))}
-                      {validation.warnings.map((warning, idx) => (
-                        <div key={`warning-${idx}`} className={`text-xs px-2 py-1.5 rounded ${semanticWarning}`}>
-                          <span className="font-semibold">Warning:</span> {warning}
-                        </div>
-                      ))}
-                    </div>
-                  )}
                 </div>
               )})}
             </div>
