@@ -273,7 +273,7 @@ function App({ auth }) {
     const ro = new ResizeObserver(measure)
     ro.observe(el)
     return () => ro.disconnect()
-  }, [hasUncommitted, permissions.canEditRoster, showChanges])
+  }, [hasUncommitted, rosterDiff.slotChanges.length, permissions.canEditRoster, showChanges])
 
   // Measure the tab switcher (see tabBarHeight above). Shown at all
   // breakpoints, so it always contributes its height.
@@ -669,8 +669,10 @@ function App({ auth }) {
 
       {/* Uncommitted-changes bar: draft edits are visible in the roster but not
           yet saved to the binding. Shows what changed + who is affected, with
-          Save / Discard. Undo/redo are independent of this (see spec). */}
-      {hasUncommitted && permissions.canEditRoster && (
+          Save / Discard. Undo/redo are independent of this (see spec). Hidden
+          when the draft nets to zero actual slot changes (a draft can exist yet
+          be diff-empty), so the bar never reads "0 unsaved changes". */}
+      {hasUncommitted && rosterDiff.slotChanges.length > 0 && permissions.canEditRoster && (
         <div ref={draftBarRef} className={`sticky top-0 ${zSticky} ${draftBar}`}>
           <div className="max-w-full px-3 sm:px-6 lg:px-8 py-2 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
             <div className="flex-1 min-w-0 text-sm text-amber-900">
