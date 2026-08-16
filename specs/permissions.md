@@ -219,6 +219,49 @@ via `SECURITY DEFINER` helpers (`is_tenant_member(tenant)` /
 (`members.claimed_user_id = auth.uid()`). Migration details are in
 [multi-tenant.md](multi-tenant.md#data-model-changes-supabase-phase-3).
 
+### Testing (two levels, mirroring the two-layer authority)
+
+Authorization is tested at **both** enforcement layers, and one must never be
+mistaken for the other (the load-bearing invariant above):
+
+- **`can(action, target)` — Vitest, pure.** `can()` is a pure resolver over the
+  policy table, so it is tested exactly like the other pure utils
+  ([`derivedState.test.js`](../src/utils/derivedState.test.js) pattern): a new
+  `permissions.test.js` drives the **action matrix** as a `describe.each` table —
+  one row per (role, action, target, self?) → expected boolean. It must cover the
+  non-obvious cells: **`self` is additive** (a `viewer`-roled member still gets
+  the `self` actions on their **own** record); **`self` never grants
+  `member:edit-team-roles`**; **owner-only** actions (`tenant:manage-users`,
+  `team:delete`); and a **configurable-defaults** case — override one policy-table
+  cell and assert `can()` reflects it (proving overrides are data, not code).
+  `roster:assign-self`'s **eligibility** cases live with the `explainSwap`
+  `rejection()` tests in
+  [`constraintsUtils.test.js`](../src/utils/constraintsUtils.test.js) (it reuses
+  those checks — see the note above), not here.
+  > These are **UI-shaping** tests. Passing `can()` tests do **not** prove a
+  > client can't exceed its role — only the DB does. Treating them as security
+  > tests would recreate the very conflation this file warns against.
+
+- **RLS policies + `SECURITY DEFINER` helpers — the real authority, DB harness.**
+  The client cannot be trusted, so the actual authorization guarantee is proven
+  against a **running Postgres**, not in Vitest. Use the **local Supabase stack**
+  the repo already ships (`supabase start` brings it up on `:54322`;
+  `supabase db reset` applies every migration under `supabase/migrations/`). The
+  tests set the acting identity (e.g. `SET LOCAL role authenticated` +
+  `request.jwt.claim.sub`) and assert the policy outcome:
+  - a `viewer` is **denied** `UPDATE rosters`; an `owner`/`admin` is allowed.
+  - `tenant_role_of(tenant)` / `is_tenant_member(tenant)` return the right role
+    (and don't recurse — the reason they are `SECURITY DEFINER`).
+  - **last-owner protection**: removing the final owner raises.
+  - the **`self`** predicate (`members.claimed_user_id = auth.uid()`) gates
+    own-record writes and nothing else.
+
+  Prefer **pgTAP** (Supabase's supported in-DB test framework) so assertions run
+  where the policies do. This DB layer has **no coverage today** — writing it is
+  part of the Phase-3 migration work
+  ([multi-tenant.md](multi-tenant.md#phased-delivery)), and until it exists the
+  RLS gap is called out here rather than left silent.
+
 ### Configurable defaults (future)
 
 The matrix above is the **default policy**, not a hard-coded law. A future

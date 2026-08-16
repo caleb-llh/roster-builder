@@ -173,6 +173,18 @@ keep that contract. The change is *where the pieces come from*:
   These are read-only and only consulted when the corresponding constraint is
   enabled, so single-team behaviour is byte-for-byte identical.
 
+**Testing the seam (the acceptance test).** The strongest correctness signal is
+that **every existing generator / `derivedState` / stats / validator test passes
+unchanged** after the entity model lands — that proves the resolved shape is
+truly identical to today's. So the seam's tests are: (1) keep the current suite
+green with `externalLoad`/`externalAssignments` defaulting to no-op; (2) add
+`getDerivedState` cases asserting a `members` + `team_members` join resolves to
+the same `{ id, name, roles, understudyFor, include }` shape, that one member on
+two teams resolves to different per-team `roles`, and that global
+`member_constraints` flow in regardless of team. (Authorization is tested
+separately — see
+[permissions.md](permissions.md#testing-two-levels-mirroring-the-two-layer-authority).)
+
 ## Feature-by-feature impact analysis
 
 Ordered by how much each is affected.
@@ -290,8 +302,10 @@ keeps `npx vitest run` + `npm run build` green.
   tests.
 - **Phase 3 — production (Supabase).** `0004_tenants_teams.sql` (tables, RLS
   re-scoped to tenant, RPCs, backfill migration), provider join to the resolved
-  shape, tenant/team admin UI. Update `architecture.md` data-model + permissions
-  sections in the same change.
+  shape, tenant/team admin UI. **RLS/RPC tests run against the local Supabase
+  stack** (`supabase start` + `supabase db reset`), preferably in pgTAP — see
+  [permissions.md](permissions.md#testing-two-levels-mirroring-the-two-layer-authority).
+  Update `architecture.md` data-model + permissions sections in the same change.
 
 Each phase updates the relevant binding spec files and this file's status per
 [`../AGENTS.md`](../AGENTS.md).
