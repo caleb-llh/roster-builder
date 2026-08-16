@@ -7,7 +7,7 @@ the off-repo dependencies are*.
 
 ## One app, two data modes
 
-Roster Builder is a single React + Vite SPA that runs in one of two modes,
+Roster Platform is a single React + Vite SPA that runs in one of two modes,
 selected **once at startup** and constant for the app's lifetime:
 
 - **Local** — a login-free, in-memory YAML playground. Nothing is persisted; a refresh starts fresh. Every permission is granted.

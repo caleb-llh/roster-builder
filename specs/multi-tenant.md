@@ -245,7 +245,7 @@ Ordered by how much each is affected.
    ([understudy.md](understudy.md#scope-what-is-team-level-vs-roster-level)).
    **Invariant to keep:** locked/pre-existing slots never move, still true.
 
-5. **Constraints & validation** (`constraintsUtils`, `assignmentValidator`,
+5. **Constraints & validation** (`constraintPrimitives`, `swapPolicy`, `assignmentValidator`,
    `rosterSchema`) — **medium.** `isMemberUnavailable` fed the global calendar;
    `canSwapRosterSlots` and the manual-assignment picker gain an optional
    cross-team clash check; add tenant→team→roster constraint merge; new

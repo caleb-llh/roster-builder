@@ -48,7 +48,7 @@ import { ActionLogger, NULL_LOGGER } from './actionLog'
 import { seedUnderstudySlots } from './understudySeeding'
 import { planPromotions, clearPromotionPins } from './promotionPlanning'
 import { isUnderstudyRole } from '../understudy'
-import { areConsecutiveWeekends } from '../constraintChecking'
+import { areConsecutiveWeekends } from '../constraintPrimitives'
 import { CONSTRAINT_KEYS, PREFERENCE_KEYS, isConstraintEnabled, isPreferenceEnabled } from '../../schema/rosterSchema'
 
 /**

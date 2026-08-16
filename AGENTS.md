@@ -62,6 +62,8 @@ session — the root cause, the reason a naive approach failed, the reason a
 weight/threshold has the value it does — belongs in the spec so it is not
 rediscovered later.
 
+Recommend updates to this feedback loop if there is room for improvements to the harness.
+
 ### When to add a Design Decision entry
 
 Add an entry when any of the following is true:
@@ -84,3 +86,4 @@ Keep entries concise: what the decision is, and why. Link to the code by name.
 - Build check: `npm run build`.
 - Never commit unless the user explicitly asks. When asked, do not commit
   secrets or the gitignored `local/` inputs.
+

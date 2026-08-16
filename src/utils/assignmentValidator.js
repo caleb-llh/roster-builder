@@ -15,9 +15,9 @@ import {
   getWeekAssignments,
   countMonthlyAssignments,
   areConsecutiveWeekends
-} from './constraintChecking'
-import { CONSTRAINT_KEYS, PREFERENCE_KEYS, isConstraintEnabled, isPreferenceEnabled, MEMBER_PREF_FIELDS, getConstraintValue } from '../schema/rosterSchema'
-import { isUnderstudyRole, countUnderstudySessionsBefore, UNDERSTUDY_MIN_SESSIONS } from './understudy'
+} from './constraintPrimitives'
+import { PREFERENCE_KEYS, isPreferenceEnabled, MEMBER_PREF_FIELDS } from '../schema/rosterSchema'
+import { countUnderstudySessionsBefore } from './understudy'
 import { getConstraint, CONSTRAINT_MODES } from './constraints'
 
 /**
@@ -61,20 +61,28 @@ const checkUnderstudyBeforeRole = (event, allEvents, rosterConstraints, members)
   const errors = []
 
   if (!event.roster || !Array.isArray(event.roster)) return errors
-  if (!isConstraintEnabled(rosterConstraints, CONSTRAINT_KEYS.ENFORCE_UNDERSTUDY_BEFORE_ROLE)) return errors
+
+  const understudyGate = getConstraint('understudy-before-role')
+  const ctx = {
+    rosterConstraints,
+    members,
+    priorUnderstudySessions: (memberId, role, date) =>
+      countUnderstudySessionsBefore(memberId, role, allEvents, date),
+  }
+  if (!understudyGate.enabled(ctx)) return errors
 
   event.roster.forEach(assignment => {
-    if (!assignment.member_id || isUnderstudyRole(assignment.role)) return
-    const member = members.find(m => m.id === assignment.member_id)
-    if (!member) return
-
-    const fullyPerforms = (member.roles || []).includes(assignment.role)
-    const isTrainee = (member.understudyFor || []).includes(assignment.role)
-    if (fullyPerforms || !isTrainee) return
-
-    const sessions = countUnderstudySessionsBefore(member.id, assignment.role, allEvents, event.date)
-    if (sessions < UNDERSTUDY_MIN_SESSIONS) {
-      errors.push(`${member.name || member.id} is an understudy for ${assignment.role} and must complete at least ${UNDERSTUDY_MIN_SESSIONS} understudy session before being rostered for the actual role`)
+    if (!assignment.member_id) return
+    const violation = understudyGate.check(
+      { memberId: assignment.member_id, role: assignment.role, event },
+      ctx,
+      CONSTRAINT_MODES.IS_PLACED
+    )
+    // The validator only diagnoses the real-role-too-early side; the descriptor
+    // returns null for the understudy-slot side in IS_PLACED mode.
+    if (violation && violation.code === 'understudy-before-role') {
+      const member = members.find(m => m.id === assignment.member_id)
+      errors.push(`${member?.name || assignment.member_id} is an understudy for ${violation.params.role} and must complete at least ${violation.params.minSessions} understudy session before being rostered for the actual role`)
     }
   })
 
@@ -101,15 +109,39 @@ const checkRosterPeriodViolation = (event, rosterPeriod) => {
 }
 
 /**
- * Check roster constraints violations
+ * Check roster constraints violations.
+ *
+ * The DECISION for each rule comes from the shared CONSTRAINTS registry (same
+ * predicate/cap/flag as the generator, in IS_PLACED mode), so there is one
+ * authority. The validator only owns the WORDING: where the registry answers a
+ * yes/no per assignment, the validator additionally enumerates the specific
+ * offending events (clashing dates, month totals) for a richer message. See the
+ * "one authority, three consumers" decision in specs/generation.md.
  */
 const checkRosterConstraints = (event, allEvents, rosterConstraints, members) => {
   const errors = []
   
   if (!event.roster || !rosterConstraints) return errors
+
+  // ctx for registry decisions: counts come from whole-roster scans of allEvents
+  // (the validator has no stateful tracker). currentRoster excludes the
+  // assignment under test so once-per-event asks "is this member in ANOTHER
+  // slot?" — matching the generator's would-place semantics.
+  const makeCtx = (excludeRole) => ({
+    rosterConstraints,
+    members,
+    currentRoster: () => event.roster.filter(r => r.member_id && r.role !== excludeRole),
+    weeklyCount: (memberId, date) => getWeekAssignments(memberId, date, allEvents).length,
+    monthlyCount: (memberId, date) => countMonthlyAssignments(memberId, date, allEvents),
+  })
+
+  const oncePerEvent = getConstraint('once-per-event')
+  const oncePerWeek = getConstraint('once-per-week')
+  const maxPerMonth = getConstraint('max-per-month')
   
-  // Check ONLY_ONCE_PER_EVENT - member can only be assigned to one role per event
-  if (isConstraintEnabled(rosterConstraints, CONSTRAINT_KEYS.ONLY_ONCE_PER_EVENT)) {
+  // ONLY_ONCE_PER_EVENT — decision from the registry, per member; wording lists
+  // the specific roles so the message stays actionable.
+  if (oncePerEvent.enabled(makeCtx())) {
     const multipleRoles = getMembersWithMultipleRoles(event.roster)
     multipleRoles.forEach(({ memberId, roles }) => {
       const member = members.find(m => m.id === memberId)
@@ -117,37 +149,37 @@ const checkRosterConstraints = (event, allEvents, rosterConstraints, members) =>
     })
   }
   
-  // Get assigned members for this event
   const assignedMemberIds = event.roster
     .filter(r => r.member_id)
     .map(r => r.member_id)
   
-  // Check ONLY_ONCE_PER_WEEK - member can't be rostered more than once in same week (Monday to Sunday)
-  if (isConstraintEnabled(rosterConstraints, CONSTRAINT_KEYS.ONLY_ONCE_PER_WEEK)) {
+  // ONLY_ONCE_PER_WEEK — registry decides (IS_PLACED: count-in-week > 1); the
+  // validator enumerates the other in-week events for the message.
+  if (oncePerWeek.enabled(makeCtx())) {
+    const ctx = makeCtx()
     assignedMemberIds.forEach(memberId => {
+      const violation = oncePerWeek.check({ memberId, role: null, event }, ctx, CONSTRAINT_MODES.IS_PLACED)
+      if (!violation) return
       const weekAssignments = getWeekAssignments(memberId, event.date, allEvents)
       const otherWeekEvents = weekAssignments.filter(e => e.date !== event.date)
       const member = members.find(m => m.id === memberId)
-      
       otherWeekEvents.forEach(weekEvent => {
         errors.push(`${member?.name || memberId} is already rostered on ${weekEvent.date} (${weekEvent.day_of_week}) this week`)
       })
     })
   }
   
-  // Check MAX_ASSIGNMENTS_PER_MONTH
-  if (isConstraintEnabled(rosterConstraints, CONSTRAINT_KEYS.MAX_ASSIGNMENTS_PER_MONTH)) {
-    const maxLimit = getConstraintValue(rosterConstraints, CONSTRAINT_KEYS.MAX_ASSIGNMENTS_PER_MONTH)
-    
+  // MAX_ASSIGNMENTS_PER_MONTH — registry decides (IS_PLACED: count > cap); the
+  // validator reports the exact count and month name.
+  if (maxPerMonth.enabled(makeCtx())) {
+    const ctx = makeCtx()
     assignedMemberIds.forEach(memberId => {
-      const monthlyCount = countMonthlyAssignments(memberId, event.date, allEvents)
-      
-      if (monthlyCount > maxLimit) {
-        const member = members.find(m => m.id === memberId)
-        const eventDate = new Date(event.date)
-        const monthName = eventDate.toLocaleString('default', { month: 'long' })
-        errors.push(`${member?.name || memberId} has ${monthlyCount} assignments in ${monthName} (max: ${maxLimit})`)
-      }
+      const violation = maxPerMonth.check({ memberId, role: null, event }, ctx, CONSTRAINT_MODES.IS_PLACED)
+      if (!violation) return
+      const member = members.find(m => m.id === memberId)
+      const eventDate = new Date(event.date)
+      const monthName = eventDate.toLocaleString('default', { month: 'long' })
+      errors.push(`${member?.name || memberId} has ${violation.params.count} assignments in ${monthName} (max: ${violation.params.cap})`)
     })
   }
   

@@ -36,8 +36,9 @@
  * ported one at a time. See specs/generation.md.
  */
 
-import { checkMemberAvailability } from './constraintChecking'
-import { CONSTRAINT_KEYS, isConstraintEnabled } from '../schema/rosterSchema'
+import { isMemberAvailable } from './constraintPrimitives'
+import { CONSTRAINT_KEYS, isConstraintEnabled, getConstraintValue } from '../schema/rosterSchema'
+import { isUnderstudyRole, baseRoleOf, UNDERSTUDY_MIN_SESSIONS } from './understudy'
 
 export const CONSTRAINT_MODES = {
   WOULD_PLACE: 'would-place',
@@ -48,6 +49,22 @@ export const CONSTRAINT_MODES = {
  * A `placement` is the subject of a check: a member landing (or already sitting)
  * in a slot of an event.
  *   { memberId, role, event }   // event carries `date` (and later start/end)
+ *
+ * The `ctx` is the consumer's environment. Feasibility rules read intrinsic
+ * facts off it (`memberConstraints`, `members`). Load-cadence rules need COUNTS,
+ * which each consumer computes differently — the generator from its stateful
+ * tracker, the validator from a whole-roster scan of `allEvents`. To keep the
+ * rule defined once, the descriptor calls a small uniform counting interface the
+ * consumer supplies on `ctx`; only the plumbing differs, never the rule:
+ *   ctx.currentRoster(placement)              -> slot[] of the event being filled
+ *   ctx.weeklyCount(memberId, date)           -> assignments in that week
+ *   ctx.monthlyCount(memberId, date)          -> assignments in that month
+ *   ctx.priorUnderstudySessions(memberId, baseRole, date) -> understudy sessions
+ *                                                            strictly before date
+ * In 'would-place' mode the counts EXCLUDE the placement being considered (it is
+ * not yet recorded); in 'is-placed' mode they INCLUDE it (it is already in the
+ * roster). That is exactly why the comparison is `count >= cap` (would-place)
+ * vs `count > cap` (is-placed) — same cap, one extra already-counted self.
  */
 
 export const CONSTRAINTS = [
@@ -57,10 +74,98 @@ export const CONSTRAINTS = [
     enabled: (ctx) => isConstraintEnabled(ctx.rosterConstraints, CONSTRAINT_KEYS.ENFORCE_MEMBER_AVAILABILITY),
     // Availability is intrinsic to (member, date): mode is irrelevant.
     check: (placement, ctx) => {
-      if (checkMemberAvailability(placement.memberId, placement.event.date, ctx.memberConstraints)) {
+      if (isMemberAvailable(placement.memberId, placement.event.date, ctx.memberConstraints)) {
         return null
       }
       return { code: 'unavailable', params: { memberId: placement.memberId, date: placement.event.date } }
+    },
+  },
+  {
+    key: 'once-per-event',
+    kind: 'feasibility',
+    enabled: (ctx) => isConstraintEnabled(ctx.rosterConstraints, CONSTRAINT_KEYS.ONLY_ONCE_PER_EVENT),
+    // A member may hold at most one slot in a single event. Mode is irrelevant:
+    // whether we are about to place or checking a placed roster, the question is
+    // "is this member in another slot of this event?" — the consumer's
+    // currentRoster excludes the slot being filled (would-place) or is the whole
+    // roster minus self-by-identity (is-placed handled by the validator's own
+    // duplicate scan), so a single presence check answers both.
+    check: (placement, ctx) => {
+      const roster = ctx.currentRoster(placement)
+      if (roster.some(s => s.member_id === placement.memberId)) {
+        return { code: 'once-per-event', params: { memberId: placement.memberId, date: placement.event.date } }
+      }
+      return null
+    },
+  },
+  {
+    key: 'once-per-week',
+    kind: 'load-cadence',
+    enabled: (ctx) => isConstraintEnabled(ctx.rosterConstraints, CONSTRAINT_KEYS.ONLY_ONCE_PER_WEEK),
+    // Cap of 1 per week. would-place: any prior assignment (>= 1) blocks;
+    // is-placed: more than one in the week (> 1) is a violation.
+    check: (placement, ctx, mode) => {
+      const count = ctx.weeklyCount(placement.memberId, placement.event.date)
+      const cap = 1
+      const over = mode === CONSTRAINT_MODES.IS_PLACED ? count > cap : count >= cap
+      if (over) {
+        return { code: 'once-per-week', params: { memberId: placement.memberId, date: placement.event.date } }
+      }
+      return null
+    },
+  },
+  {
+    key: 'max-per-month',
+    kind: 'load-cadence',
+    enabled: (ctx) => isConstraintEnabled(ctx.rosterConstraints, CONSTRAINT_KEYS.MAX_ASSIGNMENTS_PER_MONTH),
+    check: (placement, ctx, mode) => {
+      const cap = getConstraintValue(ctx.rosterConstraints, CONSTRAINT_KEYS.MAX_ASSIGNMENTS_PER_MONTH)
+      const count = ctx.monthlyCount(placement.memberId, placement.event.date)
+      const over = mode === CONSTRAINT_MODES.IS_PLACED ? count > cap : count >= cap
+      if (over) {
+        return { code: 'max-per-month', params: { memberId: placement.memberId, date: placement.event.date, count, cap } }
+      }
+      return null
+    },
+  },
+  {
+    key: 'understudy-before-role',
+    kind: 'load-cadence',
+    enabled: (ctx) => isConstraintEnabled(ctx.rosterConstraints, CONSTRAINT_KEYS.ENFORCE_UNDERSTUDY_BEFORE_ROLE),
+    // Two-sided gate for a trainee of base role X:
+    //  - placing into the REAL role X requires >= MIN prior understudy sessions.
+    //  - placing into the UNDERSTUDY slot for X once already qualified is blocked
+    //    (they should perform the real role, not understudy again).
+    // The validator only diagnoses the first side (it flags a trainee sitting in
+    // a real role too early); the second side is a generator-only placement guard
+    // (there is no "over-understudied" defect to report on a finished roster), so
+    // it is expressed as a would-place-only branch.
+    check: (placement, ctx, mode) => {
+      const { memberId, role, event } = placement
+      const member = (ctx.members || []).find(m => m.id === memberId)
+      if (!member) return null
+      const understudyFor = member.understudyFor || []
+
+      if (isUnderstudyRole(role)) {
+        if (mode === CONSTRAINT_MODES.IS_PLACED) return null // generator-only guard
+        const baseRole = baseRoleOf(role)
+        if (understudyFor.includes(baseRole)) {
+          const prior = ctx.priorUnderstudySessions(memberId, baseRole, event.date)
+          if (prior >= UNDERSTUDY_MIN_SESSIONS) {
+            return { code: 'understudy-complete', params: { memberId, role: baseRole, minSessions: UNDERSTUDY_MIN_SESSIONS } }
+          }
+        }
+        return null
+      }
+
+      // Real role: a trainee for it must have understudied enough first.
+      const fullyPerforms = (member.roles || []).includes(role)
+      if (fullyPerforms || !understudyFor.includes(role)) return null
+      const prior = ctx.priorUnderstudySessions(memberId, role, event.date)
+      if (prior < UNDERSTUDY_MIN_SESSIONS) {
+        return { code: 'understudy-before-role', params: { memberId, role, minSessions: UNDERSTUDY_MIN_SESSIONS } }
+      }
+      return null
     },
   },
 ]
@@ -115,6 +220,16 @@ export function formatViolation(violation, nameOf = (id) => id) {
   switch (code) {
     case 'unavailable':
       return `${name} is unavailable on ${params.date}.`
+    case 'once-per-event':
+      return `${name} is already rostered on ${params.date}.`
+    case 'once-per-week':
+      return `${name} is already rostered that week.`
+    case 'max-per-month':
+      return `${name} has reached the monthly cap (${params.cap}).`
+    case 'understudy-before-role':
+      return `${name} must understudy ${params.role} ${params.minSessions}× before performing it.`
+    case 'understudy-complete':
+      return `${name} has completed understudy for ${params.role} and should perform the role.`
     default:
       return 'Assignment violates a roster constraint.'
   }

@@ -26,29 +26,30 @@ By default `generateRoster` is **additive**: it fills the empty slots and never 
 
 The `availability` scorer (which prioritized members with fewer available dates) was **removed**. It was a Phase-1 greedy heuristic that never appeared in the Phase-2 objective, so it couldn't survive local search and caused confusing workload imbalance. Availability is properly a **hard eligibility constraint** (`ENFORCE_MEMBER_AVAILABILITY`), not a fairness objective. Do not re-introduce it as a scorer.
 
-## Hard constraints: one authority, three consumers (target — partly duplicated today)
+## Hard constraints: one authority, many consumers
 
 The soft rules already have a single authority: the [`SCORERS`](../src/utils/rosterGenerator/scorers.js)
 registry, consumed by **both** per-candidate scoring and the whole-roster
 `evaluateState` objective, so they can't drift (see the consecutive-weekend
-invariant above). **Hard constraints should follow the same shape but currently
-do not.** Today the *same* hard rules are re-implemented in **three** places:
+invariant above). **Hard constraints now follow the same shape** via the
+[`CONSTRAINTS`](../src/utils/constraints.js) registry. Several call sites *consume*
+that one list rather than re-owning the rules — three read the **full** rule set,
+and the assignment dropdown reads the **feasibility** subset:
 
-- **`EligibilityChecker.isEligible`** ([`eligibilityChecker.js`](../src/utils/rosterGenerator/eligibilityChecker.js)) — the generator's **predictive** question: *"**may** I place M here?"*
-- **`validateEventAssignments`** ([`assignmentValidator.js`](../src/utils/assignmentValidator.js)) — the **diagnostic** question: *"is this **already-placed** assignment violating a rule?"*
-- **`explainSwap`** ([`constraintsUtils.js`](../src/utils/constraintsUtils.js)) — the manual **feasibility subset**, predictive, both directions.
+- **`EligibilityChecker.isEligible`** ([`eligibilityChecker.js`](../src/utils/rosterGenerator/eligibilityChecker.js)) — the generator's **predictive** question: *"**may** I place M here?"* (`would-place` mode, tracker-backed counts).
+- **`validateEventAssignments`** ([`assignmentValidator.js`](../src/utils/assignmentValidator.js)) — the **diagnostic** question: *"is this **already-placed** assignment violating a rule?"* (`is-placed` mode, scan-backed counts; keeps its own enumerating wording).
+- **`explainSwap`** ([`swapPolicy.js`](../src/utils/swapPolicy.js)) — the manual **feasibility subset**, predictive, both directions.
+- **The assignment dropdown** ([`getAvailableMembersForEvent`](../src/utils/constraintPrimitives.js), rendered by [`EventsView.jsx`](../src/components/EventsView.jsx)) — a **UI feasibility consumer**: its per-candidate `available` flag comes from the `availability` descriptor (called directly, bypassing `enabled`, so unavailability always shows as a cue). Role capability is the UI `canFillSlotRole`/promotion rule (see [understudy.md](understudy.md), deliberately not a registry constraint), and once-per-slot filtering is positional UI logic; it does **not** apply load-cadence caps (a human picks freely, like a swap).
 
-They mostly agree because they share low-level helpers (`constraintChecking.js`,
-`understudy.js`), but the rules themselves (which checks run, in what order, with
-what wording) are copied, and one difference is already implicit: the generator
-uses `>= maxLimit` (predictive — "would this *reach* the cap") while the validator
-uses `> maxLimit` (diagnostic — "has this *exceeded* the cap"). That difference is
-**intentional**, but undocumented and easy to mistake for a bug.
+They share low-level helpers (`constraintPrimitives.js`, `understudy.js`) **and**
+now the rule set itself. One difference remains, and it is intentional: the
+generator uses `count >= cap` (predictive — "would this *reach* the cap") while
+the validator uses `count > cap` (diagnostic — "has this *exceeded* the cap").
+That difference is a single line inside one `check`, selected by `mode`.
 
-**Design Decision — a single hard-constraint registry, three consumers.** Model
-each hard constraint once as a descriptor (mirroring `SCORERS`), tagged by *when*
-it applies, and let the three call sites be *consumers* of that one list rather
-than re-owners of the rules:
+**Design Decision — a single hard-constraint registry, many consumers.** Each
+hard constraint is modelled once as a descriptor (mirroring `SCORERS`), tagged by
+*when* it applies:
 
 - **`kind: 'feasibility'`** — physically impossible to violate: active/included,
   role capability, availability, same-event (later same-*time*) clash. Enforced
@@ -62,12 +63,36 @@ than re-owners of the rules:
 
 The predictive-vs-diagnostic distinction (the `>=`/`>` above) is a property of
 the **question the consumer asks**, not a per-copy detail: the registry runs in a
-"would placing" mode for the generator/swap and an "is placed" mode for the
-validator. **Invariant: a hard rule is defined once; generator, validator, and
-swap ask the same rule set different questions. Adding/changing a constraint must
-touch one descriptor, not three files.** Until the registry lands, the three
-implementations must be kept in lock-step by hand — changing a rule in one
-without the others is a spec regression.
+`would-place` mode for the generator/swap and an `is-placed` mode for the
+validator. **Invariant: a hard rule is defined once; generator, validator,
+swap, and the dropdown ask the same rule set different questions. Adding/changing
+a constraint touches one descriptor, not one-per-consumer copies.**
+
+Not every place that mentions availability is a registry consumer. The
+**roster-stats availability chart** ([`computeAvailabilityByRole`](../src/utils/availabilityUtils.js))
+deliberately is **not**: it answers a bench-depth question ("how many members
+*could* I field for role R on date D") that is capability-AND-free and ignores
+who is already assigned, any specific slot, and all caps. It shares the same
+low-level primitives (`canFillSlotRole`, `isMemberUnavailable`) — correct reuse —
+but routing it through the placement-oriented registry would be a category error
+(it is not evaluating a placement). See [events-ui.md](events-ui.md).
+
+**Design Decision — the counting seam (tracker vs. scan).** Feasibility rules
+read intrinsic facts off `ctx` (`memberConstraints`, `members`). Load-cadence
+rules need *counts*, which each consumer computes differently: the generator from
+its stateful [`AssignmentTracker`](../src/utils/rosterGenerator/assignmentTracker.js)
+(incremental, fast in the O(slots²) placement loop), the validator from a
+whole-roster scan of `allEvents` (no running tally on a finished roster). To keep
+the rule defined once, the descriptor calls a small **uniform counting interface**
+the consumer supplies on `ctx` — `currentRoster(placement)`,
+`weeklyCount(memberId, date)`, `monthlyCount(memberId, date)`,
+`priorUnderstudySessions(memberId, baseRole, date)`. Only the plumbing differs,
+never the rule. This is *why* the same predicate can be shared even though the
+generator and validator look nothing alike internally: they are the same check
+asked in different modes over differently-sourced counts. In `would-place` mode
+the counts **exclude** the pending placement (`count >= cap`); in `is-placed`
+mode they **include** it (`count > cap`) — same cap, one extra already-counted
+self.
 
 **Registry shape (ratified).** Each constraint is one descriptor in a
 `CONSTRAINTS` list (named to pair with `SCORERS`; "constraint" is already the
@@ -91,17 +116,23 @@ domain word — `rosterConstraints`, `CONSTRAINT_KEYS`):
   `>=` answers for free, and would force a whole-roster scan where the generator
   only needs a single-placement short-circuit.
 - **Violations are structured, not prose.** `check` returns `null` or
-  `{ code, params }` (e.g. `{ code: 'unavailable', memberId, date }`), and each
-  **consumer formats its own sentence** — the swap toast, the validator line, and
-  the log may word the same code differently, and codes stay i18n-ready. Today's
-  `explainSwap` sentences become one formatter over these codes.
+  `{ code, params }` (e.g. `{ code: 'unavailable', params: { memberId, date } }`),
+  and each **consumer formats its own sentence** — the swap toast uses the shared
+  `formatViolation`, while the generator and validator keep their own wording
+  (the validator additionally *enumerates* the offending events, which a
+  single-placement `check` cannot express; the shared part is the *decision*, not
+  the message). Codes stay i18n-ready.
 - **Two registries, not one.** `CONSTRAINTS` is pass/fail-with-a-reason (the
   hard-rule half of "eligibility & assignment policy"); `SCORERS` is weighted
   score (the soft half). Do **not** merge them — conflating a hard reject with a
   soft penalty is the mistake the removed `availability` scorer made (above).
-- **Rollout is incremental.** Migrate one rule end-to-end first (`availability`:
-  descriptor + all three consumers routed through it + tests), proving the seam,
-  then port the rest; the old helper and the descriptor may co-exist briefly.
+- **Two-sided understudy gate.** The `understudy-before-role` descriptor encodes
+  both halves: a trainee entering the *real* role needs ≥ `UNDERSTUDY_MIN_SESSIONS`
+  prior understudy sessions (`understudy-before-role` code), and a qualified
+  trainee re-entering the *understudy* slot is blocked (`understudy-complete`
+  code). The second half is a generator-only placement guard (there is no
+  "over-understudied" defect to diagnose on a finished roster), so it is emitted
+  only in `would-place` mode and the validator ignores it.
 
 ## Determinism
 

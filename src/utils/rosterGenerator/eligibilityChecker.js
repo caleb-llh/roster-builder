@@ -4,9 +4,9 @@
 
 import { 
   isAssignedToEvent
-} from '../constraintChecking'
-import { CONSTRAINT_KEYS, isConstraintEnabled, getConstraintValue } from '../../schema/rosterSchema'
-import { isUnderstudyRole, understudySlotRole, baseRoleOf, UNDERSTUDY_MIN_SESSIONS, isRoleCapable } from '../understudy'
+} from '../constraintPrimitives'
+import { CONSTRAINT_KEYS, isConstraintEnabled } from '../../schema/rosterSchema'
+import { understudySlotRole, isRoleCapable } from '../understudy'
 import { getConstraint, CONSTRAINT_MODES } from '../constraints'
 
 export class EligibilityChecker {
@@ -47,73 +47,58 @@ export class EligibilityChecker {
       }
     }
 
-    // Check ENFORCE_UNDERSTUDY_BEFORE_ROLE: a trainee for base role X may only
-    // be assigned to the real role X after understudying it (>= N sessions on
-    // strictly earlier dates). Conversely, understudy sessions are capped: once
-    // a trainee has completed their N sessions they are considered qualified,
-    // so further "X-understudy" assignments are blocked (they should perform the
-    // real role instead of understudying again).
-    if (isConstraintEnabled(this.rosterConstraints, CONSTRAINT_KEYS.ENFORCE_UNDERSTUDY_BEFORE_ROLE)) {
-      if (isUnderstudyRole(role)) {
-        const baseRole = baseRoleOf(role)
-        if ((member.understudyFor || []).includes(baseRole)) {
-          const priorSessions = this.tracker.getRoleCountBefore(memberId, role, event.date)
-          if (priorSessions >= UNDERSTUDY_MIN_SESSIONS) {
-            return {
-              eligible: false,
-              reason: `Member has already completed ${UNDERSTUDY_MIN_SESSIONS} understudy session(s) for ${baseRole} and no longer needs to understudy`,
-            }
-          }
-        }
-      } else if ((member.understudyFor || []).includes(role)) {
-        const priorSessions = this.tracker.getRoleCountBefore(memberId, understudySlotRole(role), event.date)
-        if (priorSessions < UNDERSTUDY_MIN_SESSIONS) {
-          return {
-            eligible: false,
-            reason: `Member must understudy ${role} at least ${UNDERSTUDY_MIN_SESSIONS} time(s) before performing it`,
-          }
-        }
-      }
-    }
-    
-    // Check ENFORCE_MEMBER_AVAILABILITY (via the shared constraint registry)
-    const availability = getConstraint('availability')
-    if (availability.enabled(this)) {
-      const violation = availability.check(
-        { memberId, role, event },
-        this,
-        CONSTRAINT_MODES.WOULD_PLACE
-      )
+    // Hard constraints via the shared registry (one authority, three consumers).
+    // The generator enforces BOTH feasibility and load-cadence kinds, and reads
+    // counts from its stateful tracker through the ctx counting interface below.
+    // currentRoster is passed via a per-call override so once-per-event sees the
+    // slots placed so far in this event.
+    this._currentRoster = currentRoster
+    for (const constraint of [
+      getConstraint('understudy-before-role'),
+      getConstraint('availability'),
+      getConstraint('once-per-event'),
+      getConstraint('once-per-week'),
+      getConstraint('max-per-month'),
+    ]) {
+      if (!constraint.enabled(this)) continue
+      const violation = constraint.check({ memberId, role, event }, this, CONSTRAINT_MODES.WOULD_PLACE)
       if (violation) {
-        return { eligible: false, reason: 'Member unavailable on this date' }
+        return { eligible: false, reason: this._reasonFor(violation) }
       }
     }
-    
-    // Check ONLY_ONCE_PER_EVENT
-    if (isConstraintEnabled(this.rosterConstraints, CONSTRAINT_KEYS.ONLY_ONCE_PER_EVENT)) {
-      if (isAssignedToEvent(memberId, currentRoster)) {
-        return { eligible: false, reason: 'Member already assigned to another role on this event' }
-      }
-    }
-    
-    // Check ONLY_ONCE_PER_WEEK
-    if (isConstraintEnabled(this.rosterConstraints, CONSTRAINT_KEYS.ONLY_ONCE_PER_WEEK)) {
-      const weeklyCount = this.tracker.getWeeklyAssignmentCount(memberId, event.date)
-      if (weeklyCount > 0) {
-        return { eligible: false, reason: 'Member already assigned this week' }
-      }
-    }
-    
-    // Check MAX_ASSIGNMENTS_PER_MONTH
-    if (isConstraintEnabled(this.rosterConstraints, CONSTRAINT_KEYS.MAX_ASSIGNMENTS_PER_MONTH)) {
-      const maxLimit = getConstraintValue(this.rosterConstraints, CONSTRAINT_KEYS.MAX_ASSIGNMENTS_PER_MONTH)
-      const monthlyCount = this.tracker.getMonthlyAssignmentCount(memberId, event.date)
-      if (monthlyCount >= maxLimit) {
-        return { eligible: false, reason: `Member has reached max assignments this month (${maxLimit})` }
-      }
-    }
-    
+
     return { eligible: true, reason: null }
+  }
+
+  // --- ctx counting interface consumed by the registry descriptors ---
+  currentRoster() {
+    return (this._currentRoster || []).filter(s => s.member_id)
+  }
+  weeklyCount(memberId, date) {
+    return this.tracker.getWeeklyAssignmentCount(memberId, date)
+  }
+  monthlyCount(memberId, date) {
+    return this.tracker.getMonthlyAssignmentCount(memberId, date)
+  }
+  priorUnderstudySessions(memberId, baseRole, date) {
+    return this.tracker.getRoleCountBefore(memberId, understudySlotRole(baseRole), date)
+  }
+
+  // Generator-specific wording for each violation code (kept close to prior
+  // messages so existing behaviour/tests are preserved).
+  _reasonFor(violation) {
+    const { code, params } = violation
+    switch (code) {
+      case 'unavailable': return 'Member unavailable on this date'
+      case 'once-per-event': return 'Member already assigned to another role on this event'
+      case 'once-per-week': return 'Member already assigned this week'
+      case 'max-per-month': return `Member has reached max assignments this month (${params.cap})`
+      case 'understudy-before-role':
+        return `Member must understudy ${params.role} at least ${params.minSessions} time(s) before performing it`
+      case 'understudy-complete':
+        return `Member has already completed ${params.minSessions} understudy session(s) for ${params.role} and no longer needs to understudy`
+      default: return 'Assignment violates a roster constraint'
+    }
   }
 
   /**

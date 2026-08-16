@@ -1,5 +1,5 @@
 import { canFillSlotRole, isUnderstudyRole } from './understudy'
-import { isMemberUnavailable } from './constraintsUtils'
+import { isMemberUnavailable } from './constraintPrimitives'
 
 /**
  * Compute, for each real role, how many members are AVAILABLE for that role on
