@@ -782,4 +782,35 @@ describe('Roster Generator', () => {
       expect(first).not.toBe(second)
     })
   })
+
+  // Multi-tenant Phase 0 seam: the engine accepts an optional cross-team
+  // snapshot (externalAssignments) that defaults to no-op. Passing an empty one
+  // must produce byte-for-byte identical output to omitting it entirely, so
+  // single-team generation is provably unchanged.
+  describe('cross-team seam (Phase 0 no-op)', () => {
+    it('empty externalAssignments matches the default output', () => {
+      const baseline = generateRoster(
+        createTestEvents(),
+        createTestMembers(),
+        [],
+        [],
+        rosterConstraints,
+        rosterPreferences,
+        rosterPeriod
+      )
+      const withEmpty = generateRoster(
+        createTestEvents(),
+        createTestMembers(),
+        [],
+        [],
+        rosterConstraints,
+        rosterPreferences,
+        rosterPeriod,
+        { externalAssignments: {} }
+      )
+      // The seeded generator is deterministic, so the resolved rosters match.
+      expect(withEmpty.events).toEqual(baseline.events)
+      expect(withEmpty.quality).toBe(baseline.quality)
+    })
+  })
 })

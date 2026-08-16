@@ -75,3 +75,37 @@ export function getDerivedState(data) {
     rosterPeriod
   }
 }
+
+/**
+ * Resolve the single derived-state contract the engine/validators consume
+ * (multi-tenant Phase 0 seam).
+ *
+ * Today a roster is one document and `getDerivedState` already yields the
+ * normalized shape (`{ members: [{ id, name, roles, understudyFor, include }],
+ * events, memberConstraints, ... }`). This seam names that contract explicitly
+ * so the target tenant/team model can later resolve the SAME shape by joining
+ * `members` + `team_members` (see specs/multi-tenant.md "Compatibility seam")
+ * without the engine changing.
+ *
+ * For a single team it is an identity pass over `getDerivedState(data)` plus the
+ * optional read-only cross-team **assignments**, which default to empty/no-op so
+ * single-team behaviour is byte-for-byte identical.
+ *
+ * `externalAssignments` is the single cross-team primitive: any "load" figure
+ * (monthly/weekly/total counts) is *derived* from it by the same rollup the
+ * `AssignmentTracker` already applies to local assignments, so it is never
+ * passed or stored as a separate, drift-prone input. See
+ * specs/multi-tenant.md "Compatibility seam".
+ *
+ * @param {object|null} data - the roster document (current single-team source)
+ * @param {object} [external] - { externalAssignments } read-only snapshot of the
+ *   member's assignments in OTHER teams (`{ memberId: [dateOrDatetime, ...] }`);
+ *   empty by default.
+ * @returns derived state + `externalAssignments`.
+ */
+export function resolveDerivedState(data, external = {}) {
+  return {
+    ...getDerivedState(data),
+    externalAssignments: external.externalAssignments || {},
+  }
+}

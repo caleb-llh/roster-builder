@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { getDerivedState } from './derivedState'
+import { getDerivedState, resolveDerivedState } from './derivedState'
 import { CONSTRAINT_KEYS, PREFERENCE_KEYS } from '../schema/rosterSchema'
 import { DEFAULT_ROSTER_CONSTRAINTS, DEFAULT_ROSTER_PREFERENCES } from '../config/rosterDefaults'
 
@@ -416,6 +416,57 @@ describe('derivedState', () => {
       expect(state.members).toBeTruthy()
       expect(state.events).toBeTruthy()
       expect(state.activeMembers).toHaveLength(1) // Only alice
+    })
+  })
+
+  // Multi-tenant Phase 0 compatibility seam. resolveDerivedState is the single
+  // contract the engine consumes; for a single team it must be identical to
+  // getDerivedState plus empty/no-op cross-team inputs.
+  describe('resolveDerivedState (seam)', () => {
+    const data = {
+      roster: { start_date: '2026-02-01', end_date: '2026-04-30' },
+      members: [
+        { id: 'alice', name: 'Alice', roles: ['vm', 'cam-1'] },
+        { id: 'bob', name: 'Bob', roles: ['vm', { name: 'cam-1', understudy: true }], active: false },
+      ],
+      declared_roles: ['vm', 'cam-1'],
+      events: [{ date: '2026-02-07', roster: [{ role: 'vm', member_id: 'alice' }] }],
+      member_constraints: [{ member_id: 'alice', unavailable_dates: ['2026-02-15'] }],
+      member_preferences: [{ member_id: 'alice', days: ['Sunday'] }],
+      roster_constraints: { [CONSTRAINT_KEYS.ONLY_ONCE_PER_EVENT]: true },
+      roster_preferences: { [PREFERENCE_KEYS.AVOID_CONSECUTIVE_WEEKS]: true },
+    }
+
+    it('is identity over getDerivedState for the shared keys (single team)', () => {
+      const base = getDerivedState(data)
+      const resolved = resolveDerivedState(data)
+      // Every key getDerivedState produces is byte-for-byte identical.
+      for (const key of Object.keys(base)) {
+        expect(resolved[key]).toEqual(base[key])
+      }
+      // Understudy normalization survives the seam unchanged.
+      expect(resolved.members[1].roles).toEqual(['vm'])
+      expect(resolved.members[1].understudyFor).toEqual(['cam-1'])
+    })
+
+    it('adds an empty no-op externalAssignments by default', () => {
+      const resolved = resolveDerivedState(data)
+      expect(resolved.externalAssignments).toEqual({})
+      // Load is derived, never a separate stored input.
+      expect(resolved.externalLoad).toBeUndefined()
+    })
+
+    it('passes through the provided externalAssignments verbatim', () => {
+      const externalAssignments = { alice: ['2026-02-07', '2026-02-14'] }
+      const resolved = resolveDerivedState(data, { externalAssignments })
+      expect(resolved.externalAssignments).toBe(externalAssignments)
+    })
+
+    it('handles null data like getDerivedState + empty inputs', () => {
+      const resolved = resolveDerivedState(null)
+      expect(resolved.members).toEqual([])
+      expect(resolved.events).toEqual([])
+      expect(resolved.externalAssignments).toEqual({})
     })
   })
 })

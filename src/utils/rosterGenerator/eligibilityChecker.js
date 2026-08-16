@@ -10,11 +10,19 @@ import { CONSTRAINT_KEYS, isConstraintEnabled, getConstraintValue } from '../../
 import { isUnderstudyRole, understudySlotRole, baseRoleOf, UNDERSTUDY_MIN_SESSIONS, isRoleCapable } from '../understudy'
 
 export class EligibilityChecker {
-  constructor(members, constraints, rosterConstraints, tracker) {
+  constructor(members, constraints, rosterConstraints, tracker, options = {}) {
     this.members = members
     this.memberConstraints = constraints
     this.rosterConstraints = rosterConstraints
     this.tracker = tracker
+    // Cross-team seam (multi-tenant Phase 0): a read-only snapshot of the
+    // member's assignments in OTHER teams (`{ memberId: [dateOrDatetime, ...] }`).
+    // The single cross-team primitive — any load/cap count is derived from it,
+    // the same way the tracker derives counters from local assignments.
+    // Consulted only once the cross-team cap/clash constraints exist; empty by
+    // default so single-team eligibility is unchanged. See
+    // specs/multi-tenant.md (Compatibility seam).
+    this.externalAssignments = options.externalAssignments || {}
   }
   
   /**

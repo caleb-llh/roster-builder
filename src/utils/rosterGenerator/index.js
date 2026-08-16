@@ -68,7 +68,17 @@ export function generateRoster(
   rosterPeriod,
   options = {}
 ) {
-  const { logging = true, optimizeExisting = false } = options
+  const {
+    logging = true,
+    optimizeExisting = false,
+    // Cross-team seam (multi-tenant Phase 0): a read-only snapshot of the
+    // member's assignments in OTHER teams' rosters, consulted only when the
+    // cross-team constraints are enabled. Any "load" count is derived from this
+    // (the same rollup the tracker uses locally), so it is the single primitive.
+    // Default empty → single-team behaviour is byte-for-byte identical.
+    // See specs/multi-tenant.md (Compatibility seam).
+    externalAssignments = {},
+  } = options
   const logger = new ActionLogger(logging)
 
   logger.info('Roster generation started', {
@@ -84,7 +94,7 @@ export function generateRoster(
     rosterConstraints,
     rosterPreferences,
     rosterPeriod,
-    { logger, optimizeExisting }
+    { logger, optimizeExisting, externalAssignments }
   )
 
   // Restore chronological event order
@@ -112,12 +122,18 @@ function generateRosterSingleRun(
   rosterPeriod,
   options = {}
 ) {
-  const { seed = 1, localSearch = true, optimizeExisting = false, logger = NULL_LOGGER } = options
+  const {
+    seed = 1,
+    localSearch = true,
+    optimizeExisting = false,
+    logger = NULL_LOGGER,
+    externalAssignments = {},
+  } = options
   const rng = createRng(seed)
 
   // Initialize components
   const tracker = new AssignmentTracker(members, events, rosterPeriod)
-  const eligibilityChecker = new EligibilityChecker(members, memberConstraints, rosterConstraints, tracker)
+  const eligibilityChecker = new EligibilityChecker(members, memberConstraints, rosterConstraints, tracker, { externalAssignments })
   const scoringEngine = new ScoringEngine(rosterPreferences, memberPreferences, tracker)
   
   // Clone events to avoid mutating original
