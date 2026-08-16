@@ -1,4 +1,5 @@
 import { canFillSlotRole, isUnderstudyRole, isPromotedForRole } from './understudy'
+import { getConstraint, CONSTRAINT_MODES, formatViolation } from './constraints'
 
 /**
  * Check if a member is unavailable on a specific date
@@ -142,9 +143,13 @@ export const explainSwap = ({
       (!isUnderstudyRole(slot.role) && isPromotedForRole(member, slot.role, events, event.date))
     if (!roleOk) return `${nameOf(memberId)} can't fill the ${slot.role} role.`
 
-    if (isMemberUnavailable(memberId, event.date, memberConstraints)) {
-      return `${nameOf(memberId)} is unavailable on ${event.date}.`
-    }
+    const availability = getConstraint('availability')
+    const unavailable = availability.check(
+      { memberId, role: slot.role, event },
+      { memberConstraints },
+      CONSTRAINT_MODES.WOULD_PLACE
+    )
+    if (unavailable) return formatViolation(unavailable, nameOf)
 
     const clash = event.roster.some((r, i) => i !== ignoreRoleIndex && r.member_id === memberId)
     if (clash) return `${nameOf(memberId)} is already rostered on ${event.date}.`

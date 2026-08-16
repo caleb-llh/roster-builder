@@ -3,11 +3,11 @@
  */
 
 import { 
-  checkMemberAvailability,
   isAssignedToEvent
 } from '../constraintChecking'
 import { CONSTRAINT_KEYS, isConstraintEnabled, getConstraintValue } from '../../schema/rosterSchema'
 import { isUnderstudyRole, understudySlotRole, baseRoleOf, UNDERSTUDY_MIN_SESSIONS, isRoleCapable } from '../understudy'
+import { getConstraint, CONSTRAINT_MODES } from '../constraints'
 
 export class EligibilityChecker {
   constructor(members, constraints, rosterConstraints, tracker, options = {}) {
@@ -76,9 +76,15 @@ export class EligibilityChecker {
       }
     }
     
-    // Check ENFORCE_MEMBER_AVAILABILITY
-    if (isConstraintEnabled(this.rosterConstraints, CONSTRAINT_KEYS.ENFORCE_MEMBER_AVAILABILITY)) {
-      if (!checkMemberAvailability(memberId, event.date, this.memberConstraints)) {
+    // Check ENFORCE_MEMBER_AVAILABILITY (via the shared constraint registry)
+    const availability = getConstraint('availability')
+    if (availability.enabled(this)) {
+      const violation = availability.check(
+        { memberId, role, event },
+        this,
+        CONSTRAINT_MODES.WOULD_PLACE
+      )
+      if (violation) {
         return { eligible: false, reason: 'Member unavailable on this date' }
       }
     }
@@ -122,7 +128,7 @@ export class EligibilityChecker {
     const member = this.members.find(m => m.id === memberId)
     if (!member || member.include === false) return false
     if (!isRoleCapable(member, role)) return false
-    if (!checkMemberAvailability(memberId, event.date, this.memberConstraints)) return false
+    if (getConstraint('availability').check({ memberId, role, event }, this, CONSTRAINT_MODES.WOULD_PLACE)) return false
     if (isAssignedToEvent(memberId, (event.roster || []).filter(s => s.member_id))) return false
     return true
   }

@@ -11,7 +11,6 @@
  */
 
 import { 
-  checkMemberAvailability,
   getMembersWithMultipleRoles,
   getWeekAssignments,
   countMonthlyAssignments,
@@ -19,6 +18,7 @@ import {
 } from './constraintChecking'
 import { CONSTRAINT_KEYS, PREFERENCE_KEYS, isConstraintEnabled, isPreferenceEnabled, MEMBER_PREF_FIELDS, getConstraintValue } from '../schema/rosterSchema'
 import { isUnderstudyRole, countUnderstudySessionsBefore, UNDERSTUDY_MIN_SESSIONS } from './understudy'
+import { getConstraint, CONSTRAINT_MODES } from './constraints'
 
 /**
  * Check if member is assigned on unavailable date
@@ -28,9 +28,18 @@ const checkUnavailabilityViolation = (event, memberConstraints, members) => {
   
   if (!event.roster || !Array.isArray(event.roster)) return errors
   
+  // Availability is always reported here (NOT gated by the roster flag, unlike
+  // the generator), so call the descriptor's `check` directly rather than
+  // through `enabled`. Wording stays validator-specific.
+  const availability = getConstraint('availability')
   event.roster.forEach(assignment => {
     if (assignment.member_id) {
-      if (!checkMemberAvailability(assignment.member_id, event.date, memberConstraints)) {
+      const violation = availability.check(
+        { memberId: assignment.member_id, role: assignment.role, event },
+        { memberConstraints },
+        CONSTRAINT_MODES.IS_PLACED
+      )
+      if (violation) {
         const member = members.find(m => m.id === assignment.member_id)
         errors.push(`${member?.name || assignment.member_id} is unavailable on this date`)
       }
