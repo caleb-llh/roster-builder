@@ -10,6 +10,46 @@ dual-mode provider contract that persists this data.
 
 - The CSV / "Copy to Excel" exports compute an `exportColumns` layout: for each role, the max count across all events → that many numbered columns; understudy roles get their own columns; cells are filled positionally from the per-event `byRole` buckets.
 
+## Time granularity: events & blockouts are dates today, datetime ranges next (planned)
+
+**Current model (implemented): whole-day granularity.** An event carries a
+single `event.date` (`YYYY-MM-DD`); the [`AssignmentTracker`](../src/utils/rosterGenerator/assignmentTracker.js)
+buckets by that date, and a member's unavailability is a set of **day keys**
+(`expandUnavailableDays` in [`calendarUtils.js`](../src/utils/calendarUtils.js)
+already supports a `{ start, end }` range, but of *whole days*). This encodes an
+implicit assumption: **one event per day per member**. Two events on the same day
+therefore *collide* under any same-day rule (once-per-event, and the future
+cross-team clash), even when they are a morning and an evening service that don't
+actually overlap.
+
+**Planned change (not yet built): datetime ranges.** Move events and blockouts
+from a bare date to a **`{ start, end }` datetime range** so the model can hold
+multiple, non-overlapping events in a day. Design decisions to hold to when this
+lands:
+
+- **Clash = interval overlap, not date-equality.** Two slots (or a slot and a
+  blockout, or a slot and a cross-team assignment) conflict iff their `[start,
+  end)` ranges overlap. This **subsumes** today's behaviour: a bare date is the
+  range `[date 00:00, date+1 00:00)`, so date-only inputs keep colliding exactly
+  as before. This is the single rule the future cross-team clash check
+  ([multi-tenant.md](multi-tenant.md#compatibility-seam-how-we-avoid-rewriting-the-engine))
+  is written against — which is **why this lands before that phase**, so the
+  clash rule is authored once against intervals.
+- **Backfill is lossless.** Existing `event.date` and whole-day blockouts map to
+  a whole-day range; `sample.yaml` and the validators must accept both the bare
+  date (back-compat) and the explicit range, the same way member `roles` accept
+  both a string and the object form.
+- **Week/month bucketing keys off `start`.** `getWeekKey`/`byMonth` and the
+  fairness/spread formulas use the range's start instant, so an event that spans
+  midnight is counted in its start's week/month (defined, not ambiguous).
+- **UI may still group by day.** The calendar, month grid, and past-event muting
+  ([`EventsView`](../src/components/EventsView.jsx)) can keep grouping visually by
+  day while the *model* is datetime; time only needs to surface where events share
+  a day. Deciding how much time-of-day the UI exposes is deferred to that change.
+
+Until this lands, all clash/same-day logic remains date-granular and the
+one-event-per-day assumption holds.
+
 ## `sample.yaml` is the canonical valid-schema example
 
 [`public/sample.yaml`](../public/sample.yaml) is the **single source of truth for what a valid input document looks like**. It must always parse (`js-yaml`) and pass `runAllValidators` with zero errors, and it should exercise every supported field so that reading it teaches the full schema — including the object form of member `roles` (`- name: <role>`) and the `understudy: true` flag. When the schema changes, update `sample.yaml` in the same change (it is part of the feedback loop in [`../AGENTS.md`](../AGENTS.md)); a stale sample is a spec regression. Member `roles` accept both the object form and a bare string for backward compatibility (`normalizeMemberRoles` handles both), but the sample and new documents use the object form for consistency and to make the understudy flag expressible.

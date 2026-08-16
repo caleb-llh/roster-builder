@@ -19,6 +19,7 @@
 - [ ] traffic whitelisting/bot prevention
 - [ ] monitoring stack - availability, billing
 - [ ] google calendar integration - event creation/modification/deletion integration. can be enabled by user
+- [ ] plugin architecture? default and optional plugins - roster generator, validator, scorer, reminders, bot - enabled per team. is there a real benefit to this architecture?
 
 **UI**
 - [x] Remove the tables view and clean up

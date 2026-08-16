@@ -97,11 +97,15 @@ specified when built.
      may be evaluated over the member's assignments **summed across all teams**
      in the tenant, not just the current roster. This requires the generator /
      validator to see the member's *other* current assignments (a read-only
-     "external load" input), because a single roster document no longer holds
-     the whole picture. See [Generation impact](#feature-by-feature-impact-analysis).
-   - **Cross-team clash detection.** Two teams scheduling the same member on the
-     same **date** (later: date+time) is a clash. Detected at validation time
-     (warn or block, configurable) using the tenant-wide assignment index.
+     cross-team **assignments** snapshot); the count itself is **derived** from
+     that snapshot, not passed separately — see
+     [Compatibility seam](#compatibility-seam-how-we-avoid-rewriting-the-engine).
+   - **Cross-team clash detection.** Two teams scheduling the same member on an
+     overlapping **time range** (see the datetime-range model in
+     [data-layer.md](data-layer.md)) is a clash. Detected at validation time
+     (warn or block, configurable) using the tenant-wide assignment index. The
+     clash rule is interval-overlap, which subsumes the date-equality behaviour
+     used before datetime ranges landed.
    - **Per-team overrides.** Team-level `roster_constraints` /
      `roster_preferences` override tenant defaults, exactly as roster-level
      overrides tenant/source defaults today (`getDerivedState` already merges
@@ -163,21 +167,46 @@ keep that contract. The change is *where the pieces come from*:
   include }`), with `memberConstraints` pulled from the global member calendar.
 - The Supabase provider does the same join server-side / in the loader and hands
   the engine the identical resolved shape.
-- **New optional inputs** thread through as *additions*, defaulting to
+- **One new optional input** threads through as an *addition*, defaulting to
   empty/no-op so all existing tests pass unchanged:
-  - `externalLoad`: per-member counts/dates of assignments in *other* teams'
-    rosters (for cross-team caps).
-  - `externalAssignments`: per-date member index across teams (for clash
-    detection).
+  - `externalAssignments`: a read-only snapshot of each member's assignments in
+    *other* teams' rosters (`{ memberId: [dateOrDatetime, …] }`). It is the
+    **single cross-team primitive** and drives both cross-team rules:
+    - **clash detection** — interval-overlap between an external range and a
+      candidate slot's range (see the datetime-range model in
+      [data-layer.md](data-layer.md));
+    - **cross-team caps** — the monthly/weekly/total "load" is *derived* by the
+      same rollup `AssignmentTracker` already applies to local assignments. We do
+      **not** pass a separate precomputed `externalLoad`: a stored count would be
+      a second source of truth that can drift from the assignments it summarises
+      (`externalLoad = fold(externalAssignments)`, a function, not an input).
 
-  These are read-only and only consulted when the corresponding constraint is
+  It is read-only and only consulted when the corresponding constraint is
   enabled, so single-team behaviour is byte-for-byte identical.
+
+  > **Load derives from assignments (Design Decision).** Both intra-team and
+  > cross-team, the **assignment list is the only source of truth** and every
+  > count (`total`/`byMonth`/`byWeek`) is a fold over it — exactly what
+  > `AssignmentTracker` does today. So the seam exposes assignments, not counts.
+
+**Which teams count where (Design Decision).** The two cross-team rules use
+cross-team data *asymmetrically*, on purpose:
+
+- **Hard caps and clash are person-global** — `MAX_ASSIGNMENTS_PER_MONTH`,
+  once-per-week, and same-time clash count **local + external**. Burnout and
+  physical availability are properties of the *person*, not the team, so a
+  member on three teams must not quietly get 3× the load or be double-booked.
+- **Soft fairness stays team-local** — the `fairness` scorer (and spread /
+  diversity) rank within the *current* team only. A member who is busy elsewhere
+  but light here should not be artificially de-prioritised on this team; keeping
+  optimisation team-local preserves team autonomy. The rule of thumb:
+  **feasibility and burnout are global; optimisation quality is team-local.**
 
 **Testing the seam (the acceptance test).** The strongest correctness signal is
 that **every existing generator / `derivedState` / stats / validator test passes
 unchanged** after the entity model lands — that proves the resolved shape is
 truly identical to today's. So the seam's tests are: (1) keep the current suite
-green with `externalLoad`/`externalAssignments` defaulting to no-op; (2) add
+green with `externalAssignments` defaulting to no-op; (2) add
 `getDerivedState` cases asserting a `members` + `team_members` join resolves to
 the same `{ id, name, roles, understudyFor, include }` shape, that one member on
 two teams resolves to different per-team `roles`, and that global
@@ -208,8 +237,8 @@ Ordered by how much each is affected.
 
 4. **Generation & eligibility** (`generation.md`, `understudy.md`) — **medium.**
    Engine still runs **per roster/team** on the resolved member list; only the
-   *inputs* grow (`externalLoad`, `externalAssignments`) and only when
-   cross-team caps/clash constraints are on. Determinism (seeded) is preserved
+   *input* grows (`externalAssignments`) and only when cross-team caps/clash
+   constraints are on. Determinism (seeded) is preserved
    because external inputs are read-only snapshots. Understudy *capability
    declaration* stays per-team (`team_members.roles`/`understudy_for`), while
    understudy progress/seeding/promotion stay roster-specific and derived
@@ -289,10 +318,22 @@ Ordered by how much each is affected.
 Design is complete now; delivery is sequenced so each phase is shippable and
 keeps `npx vitest run` + `npm run build` green.
 
-- **Phase 0 — types & seam (no behaviour change).** Introduce the resolved
-  derived-state as the single contract; add the empty/no-op `externalLoad` /
-  `externalAssignments` inputs to the engine/validator with defaults, and tests
-  proving single-team behaviour is unchanged.
+- **Phase 0 — types & seam (no behaviour change). ✅ Landed.** The resolved
+  derived-state is now the single contract via `resolveDerivedState(data,
+  { externalAssignments })` in
+  [`derivedState.js`](../src/utils/derivedState.js) — a single-team identity pass
+  over `getDerivedState` plus the empty/no-op cross-team assignments snapshot.
+  `generateRoster` threads `externalAssignments` (defaulting `{}`) into the
+  `EligibilityChecker`, which stores it unused until Phase 2. `externalLoad` is
+  deliberately *not* an input — load derives from the assignments snapshot. Tests
+  lock in the no-op: the full suite stays green, `resolveDerivedState` is proven
+  identical to `getDerivedState`, and an empty `externalAssignments` produces
+  byte-for-byte identical generator output.
+- **Datetime-range model (prerequisite for Phase 2 clash).** Move events and
+  blockouts from date-granular to datetime ranges so same-day non-overlapping
+  events don't clash and clash becomes interval-overlap — its own tracked change,
+  owned by [data-layer.md](data-layer.md). Land it before Phase 2 so the
+  cross-team clash rule is written once against intervals.
 - **Phase 1 — local model.** New nested YAML shape + `getDerivedState`
   resolver + updated `sample.yaml`; MembersView split (registry vs. team
   membership); global unavailability; team selector above roster selector.
