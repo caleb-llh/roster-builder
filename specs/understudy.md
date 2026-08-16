@@ -35,3 +35,39 @@ The system supports **understudies**: members training to perform a role, who mu
 **Phase 1 — understudy slots first**: within each event, understudy slots are scored/filled **before** real-role slots (`orderedSlots` sorts understudy roles ahead), so trainees are scheduled before the roles that depend on them.
 
 **Members view**: the role filter includes understudies — filtering by `multi-vm` shows both performers and `multi-vm` trainees (`matchesRole` checks `roles` *and* `understudyFor`).
+
+## Scope: what is team-level vs. roster-level
+
+"Understudy" spans three distinct facts that live at **different scopes**. Do not
+conflate them — the emphasis matters, because the interesting behaviour is
+roster-specific while only the bare declaration is team config:
+
+1. **The understudy *declaration/capability*** — *that* a person is training
+   toward role `X` (`understudyFor: ["X"]`). This is the same axis as `roles`
+   (schedulable capability), so in the target [multi-tenant](multi-tenant.md)
+   model it lives on `team_members` (per team, admin-managed), right next to
+   `roles`. A person training on Team A is not automatically training on Team B.
+   This is the **only** team-scoped slice.
+2. **Understudy *progress* (sessions)** — *how many* shadowing sessions a trainee
+   has completed for `X`. This is **derived per roster** from that roster's event
+   history (`countUnderstudySessionsBefore` over `events`), never stored. It does
+   **not** cross teams: progress is roster history, scoped like the roster it is
+   computed from.
+3. **Seeding, promotion planning, and the promotion outcome** — Phases 0/0.5
+   above, plus the `UNDERSTUDY_MIN_SESSIONS` gate and who ends up promoted. This
+   is **entirely a roster-specific generation concern**: it decides who shadows
+   and who is promoted *within one roster's pass*. Nothing here is stored on the
+   member or team.
+
+**Promotion is derived, not stored (Design Decision).** There is deliberately no
+`promoted`/`promoted_at` status on `team_members`. "Promoted" is expressed two
+ways, both already truthful without a new field: within a roster it is the
+generation outcome (a trainee placed in a real slot after their session — see
+Phase 0.5); across a person's team career it is simply an **admin edit to their
+capability** (drop the `understudyFor` entry, add the real role to `roles`). A
+stored status+date would be a *second* source of truth that must be kept in sync
+with the derived progress in (2) — exactly the `canFillSlotRole` vs
+`isRoleCapable` conflation this spec warns against — so it was rejected. If a
+product need for a promotion *timeline* appears, it re-enters cleanly as an
+**append-only promotions log** (an event history, not a mutable status), which
+cannot drift from the derived truth.

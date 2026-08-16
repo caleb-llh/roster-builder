@@ -33,10 +33,18 @@ tenant (org)
  ├── members        (registry: the PEOPLE — identity, global constraints)
  ├── teams
  │    ├── team_members   (which people are on this team + their roles ON this team)
+ │    ├── bots           (future: team-tied bots, e.g. Telegram)        ── governance
+ │    ├── reminders      (future: team-tied reminder config/cadence)    ── governance
  │    └── rosters        (schedules; each still a JSONB document of events)
  │         └── events[].roster[] → { role, member_id, isGenerated }  (member_id → tenant member)
  └── tenant_users   (RBAC: which auth.users can administer this tenant/teams)
 ```
+
+**Bots and reminders are team-scoped and governed as configuration** (managed by
+`owner`/`admin` — see [permissions.md](permissions.md#target-model-planned-tenant-scoped--not-yet-built)).
+They are listed here as future nodes of the scope tree so the permission targets
+(`team:manage-bots`, `team:manage-reminders`) have a home; their data shape is
+specified when built.
 
 ### Design decisions
 
@@ -63,7 +71,11 @@ tenant (org)
      because there is no shared identity to aggregate over.
    - **Role capability is per-team.** "Alice can lead" may be true on Team A and
      not Team B (different role catalogs). Therefore `roles`/`understudyFor`
-     live on `team_members`, **not** on the member. The tenant member carries
+     live on `team_members`, **not** on the member. Only the understudy
+     *declaration* is team config this way; understudy **progress and promotion
+     are roster-specific and derived** — see
+     [understudy.md](understudy.md#scope-what-is-team-level-vs-roster-level) for
+     the three-way split. The tenant member carries
      only identity + *global* attributes (see constraints below). The generator
      and eligibility checks continue to receive a **per-team resolved member
      list** shaped exactly like today's normalized member
@@ -108,7 +120,7 @@ New/changed tables (all RLS-scoped to the tenant):
 | Table | Purpose | Notes |
 | --- | --- | --- |
 | `tenants` | org boundary | `id, name, created_at` |
-| `tenant_users` | **RBAC** (replaces per-roster owner/editor/viewer as the *admin* unit) | `(tenant_id, user_id, role)` where role ∈ `owner/admin/editor/viewer`; a user can hold different roles in different tenants |
+| `tenant_users` | **RBAC** (replaces the per-roster owner/editor/viewer grant) | `(tenant_id, user_id, role)` where role ∈ `owner/admin/viewer` (governance roles; `self` is an orthogonal automatic relation, not stored here — see [permissions.md](permissions.md#target-model-planned-tenant-scoped--not-yet-built)); a user can hold different roles in different tenants |
 | `members` | tenant member registry (people) | `id, tenant_id, name, telegram, avatar, claimed_user_id → auth.users` (nullable — onboarding "claim" links identity) |
 | `member_constraints` | **global** per-member unavailability | `(member_id)` → date list/ranges; tenant-scoped |
 | `teams` | scheduling unit | `id, tenant_id, name, colour/gradient` |
@@ -116,15 +128,18 @@ New/changed tables (all RLS-scoped to the tenant):
 | `rosters` | schedule document (existing) | **gains `team_id`**; RBAC moves from `roster_members` to `tenant_users` (+ optional team scoping); keeps `document jsonb` |
 | `roster_invites` | invite by email | re-scoped to **tenant** (invite a person to the org), team assignment separate |
 
-**RBAC redesign.** The current `roster_members` + owner-guarded RPCs
-([architecture.md](architecture.md) "Permissions model") move **up to the
-tenant**: `tenant_users` is the authority; the `is_roster_member` /
-`roster_role_of` `SECURITY DEFINER` helpers become `is_tenant_member(tenant)` /
-`tenant_role_of(tenant)`, and roster/team RLS policies resolve the tenant from
+**RBAC redesign.** The authorization model (permission-roles, the tenant-scoped
+grant, the `self` relation, and the action matrix) is specified in its own file:
+**[permissions.md](permissions.md#target-model-planned-tenant-scoped--not-yet-built)**.
+In storage terms this file only records the *table* change: the current
+`roster_members` + owner-guarded RPCs move **up to the tenant** — `tenant_users`
+becomes the authority, and the `is_roster_member` / `roster_role_of`
+`SECURITY DEFINER` helpers become `is_tenant_member(tenant)` /
+`tenant_role_of(tenant)`, with roster/team RLS resolving the tenant from
 `rosters.team_id → teams.tenant_id`. This preserves the load-bearing invariant
-that **the database is the real authority and client flags are UI-only**. An
-optional finer grain (per-team editor) can be layered later without changing the
-seam.
+that **the database is the real authority and client flags are UI-only**. Also
+note the **permission-role vs. team-role** split (see permissions.md): the
+`team_members.roles` column is *schedulable capability*, never governance.
 
 **Migration.** A new migration `0004_tenants_teams.sql` creates the tables and a
 **backfill**: for each existing `rosters` row, create a tenant (owner = current
@@ -183,9 +198,11 @@ Ordered by how much each is affected.
    Engine still runs **per roster/team** on the resolved member list; only the
    *inputs* grow (`externalLoad`, `externalAssignments`) and only when
    cross-team caps/clash constraints are on. Determinism (seeded) is preserved
-   because external inputs are read-only snapshots. Understudy capability stays
-   per-team (`team_members.roles`/`understudy_for`). **Invariant to keep:**
-   locked/pre-existing slots never move, still true.
+   because external inputs are read-only snapshots. Understudy *capability
+   declaration* stays per-team (`team_members.roles`/`understudy_for`), while
+   understudy progress/seeding/promotion stay roster-specific and derived
+   ([understudy.md](understudy.md#scope-what-is-team-level-vs-roster-level)).
+   **Invariant to keep:** locked/pre-existing slots never move, still true.
 
 5. **Constraints & validation** (`constraintsUtils`, `assignmentValidator`,
    `rosterSchema`) — **medium.** `isMemberUnavailable` fed the global calendar;
@@ -221,11 +238,33 @@ Ordered by how much each is affected.
    **resolved derived-state shape stays identical** across modes, which is the
    point of the seam.
 
+## Ratified decisions (review)
+
+- **Governance roles this phase: `owner` / `admin` / `viewer`** (the `editor`
+  role was dropped; member-only rights come from the orthogonal automatic `self`
+  relation, and members can self-assign). See
+  [permissions.md](permissions.md#target-model-planned-tenant-scoped--not-yet-built)
+  for the axes, the action matrix, and the future owner-configurable defaults.
+- **Team-roles / member capabilities are admin-managed**, never self-granted —
+  the concrete encoding of the permission-role vs. team-role split.
+- **Reviewed-publish UX is preserved under normalization.** The member registry
+  and `team_members` become normalized rows, but edits to them are **staged as a
+  draft and committed in one transaction** (one reviewed publish), rather than
+  writing each row immediately. This keeps the [data-layer.md](data-layer.md)
+  draft/commit contract's *feel* (edit → review → publish atomically) even though
+  the underlying storage is rows, not a single JSONB blob. Rosters keep their
+  JSONB document + existing per-roster draft/commit unchanged (Design Decision 5).
+- **JSONB → normalized backfill is approved.** The `0004_tenants_teams.sql`
+  migration includes the one-off backfill (below) from existing JSONB rosters
+  into the normalized tenant/team/member tables before production flips over.
+
 ## Open questions (defer, not blocking the model)
 
-- **Team-scoped editors** (a user who edits Team A only) — the model allows it
-  (`tenant_users.role` + optional `team_editors`), but Phase 3 can ship
-  tenant-wide roles first.
+- **Team-scoped governance** (a user who is `admin` of Team A only) — the model
+  allows it (`tenant_users.role` + optional per-team scoping), but the first
+  phase can ship tenant-wide roles first.
+- **Tenant-level read-only `viewer`** vs. per-team-only viewer — deferred (also
+  tracked in permissions.md).
 - **Clash granularity**: date-only now; date+`reporting_time` later (needs a
   normalized time on events).
 - **Cross-tenant members** (same human in two orgs) — explicitly *out*: a

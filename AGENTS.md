@@ -5,13 +5,12 @@ central rule: **the spec is binding, and every change feeds back into it.**
 
 ## The spec
 
-The **binding specification** lives in [`specs/`](specs/) — one file per domain
-([architecture](specs/architecture.md), [data-layer](specs/data-layer.md),
-[generation](specs/generation.md), [understudy](specs/understudy.md),
-[design-system](specs/design-system.md), [events-ui](specs/events-ui.md)),
-indexed by [`specs/README.md`](specs/README.md). It records *why* the system
-behaves the way it does. Supporting detail lives in
-[`src/utils/rosterGenerator/README.md`](src/utils/rosterGenerator/README.md).
+The **binding specification** lives in [`specs/`](specs/) — one file per domain,
+indexed by [`specs/README.md`](specs/README.md), which owns the map of *which
+file covers what*. It records *why* the system behaves the way it does. Where a
+decision's rationale depends on code-level implementation detail (module layout,
+tuning internals), that detail lives **beside the code** in a README, and the
+owning spec links to it rather than duplicating it.
 
 The spec is authoritative:
 
@@ -33,8 +32,17 @@ Every bug fix or feature MUST close this loop **within the same change**:
 3. **Update the spec.** If the change makes, reverses, or clarifies a design
    decision — or fixes a bug whose root cause is non-obvious — record it in the
    relevant [`specs/`](specs/) file. Include the *rationale* (the "why"), not
-   just the "what". If it changes the generator internals, also update
-   `src/utils/rosterGenerator/README.md`.
+   just the "what". If it changes code-level implementation detail that a spec
+   defers to (e.g. generator internals), also update the README that lives
+   beside that code.
+   - **Respect separation of concerns across specs; do not conflate them.** Each
+     spec file owns one concern. Put a fact in the **one** file that owns its
+     concern and **link** from others instead of restating it. If you find the
+     same thing described (or, worse, described *differently*) in two files, that
+     is a conflation bug — reconcile it into the owning file in this change. When
+     a new concern doesn't fit an existing file, give it its own spec rather than
+     bolting it onto an unrelated one. (See [`specs/README.md`](specs/README.md)
+     for which file owns what.)
 4. **Decision-check: isolated vs. shared.** For each change, decide whether the
    logic belongs to *this* component (an isolated change) or to a *shared*
    place — a util, primitive, or design-system token that other code should

@@ -69,35 +69,15 @@ The production backend is **not fully described by this repo's runtime code** �
 
 ## Permissions model
 
-Three per-roster roles form the RBAC (`public.roster_role` enum): **owner**, **editor**, **viewer**. Role is stored per `(roster_id, user_id)` in `roster_members`; a user can hold different roles on different rosters, so permissions are always relative to the **active roster**.
-
-**Two layers enforce it, and the split is the load-bearing invariant:**
-
-1. **The database (RLS) is the real authority.** Every access is gated by the policies in `0001_init.sql` and the owner-guarded RPCs — a hostile or buggy client cannot exceed its role because Postgres re-checks on every row.
-2. **Client permission flags are UI-only.** Components gate on `permissions` (never on the mode), so a viewer sees a read-only UI — but if the flags ever disagreed with the DB, the DB wins (the mutation returns `{ ok:false, errors }`). The flags exist only to shape the UI ahead of the round-trip, not to secure anything.
-
-**Client flags** (`RosterPermissions` in [`providerContract.js`](../src/data/providerContract.js)) derived from role in [`useSupabaseRosterProvider.js`](../src/data/useSupabaseRosterProvider.js):
-
-| Flag | Grants | owner | editor | viewer |
-| --- | --- | :-: | :-: | :-: |
-| `canEditRoster` | insert/remove/replace/swap assignments, generate | ✓ | ✓ | |
-| `canImport` | import/replace the whole document (seed), open the YAML drawer | ✓ | | |
-| `canUndo` | undo the last change | ✓ | ✓ | |
-
-Local mode grants all three (`LOCAL_PERMISSIONS`, a single-user sandbox). Admin actions (add/remove members, change roles, invite) are **owner-only** and have no client flag — they're guarded server-side by the owner-guarded RPCs above and simply not surfaced in the UI for non-owners.
-
-**Server-side enforcement** — what each role can actually do, and the policy that enforces it:
-
-| Capability | owner | editor | viewer | Enforced by |
-| --- | :-: | :-: | :-: | --- |
-| Read the roster `document` | ✓ | ✓ | ✓ | `rosters_select_members` (via `is_roster_member`) |
-| Update the roster `document` | ✓ | ✓ | | `rosters_update_editors` (`roster_role_of ∈ {owner,editor}`) |
-| Create a roster (become its owner) | ✓ | — | — | `rosters_insert_owner` + `add_owner_membership` trigger; `create_roster` RPC |
-| Delete a roster | ✓ | | | `rosters_delete_owner` (`owner_id = auth.uid()`) |
-| Read the member list | ✓ | | | `list_roster_members` RPC is **owner-only** (raises otherwise), even though the `members_select_own_rosters` RLS policy would let any member `SELECT` the raw table |
-| Add / remove members, change roles, invite / revoke | ✓ | | | `members_write_owner` (`roster_role_of = 'owner'`) + owner-guarded RPCs (each raises `'Only the roster owner …'`) |
-
-The owner cannot remove themselves (`remove_member` raises), so a roster always has an owner. `anon` (not signed in) gets nothing — production requires login, so there is no unauthenticated read path. Because a policy on `roster_members` cannot itself `SELECT` from `roster_members` without infinite recursion, all role checks go through the `SECURITY DEFINER` helpers `is_roster_member` / `roster_role_of` (RLS bypassed inside them), which are the single source of truth the policies call.
+The authorization model — permission-roles (owner/editor/viewer), the
+`(actor, action, target)` principle, the client-flag vs. server-RLS enforcement
+invariant, and the full capability matrix — has its own spec:
+**[permissions.md](permissions.md)**. In brief: RBAC is currently per-roster
+(`roster_members`), **the database (RLS) is the real authority and client
+`permissions` flags are UI-only**, and the target tenant-scoped model is planned
+in [multi-tenant.md](multi-tenant.md). See [permissions.md](permissions.md) for
+the tables and enforcement detail; the data model those permissions act on is the
+[Data model](#data-model-supabase-production-only) section above.
 
 ## Off-repo context: authentication (Google OAuth)
 
