@@ -10,45 +10,54 @@ dual-mode provider contract that persists this data.
 
 - The CSV / "Copy to Excel" exports compute an `exportColumns` layout: for each role, the max count across all events → that many numbered columns; understudy roles get their own columns; cells are filled positionally from the per-event `byRole` buckets.
 
-## Time granularity: events & blockouts are dates today, datetime ranges next (planned)
+## Time granularity: events are datetime ranges (UI still groups by day)
 
-**Current model (implemented): whole-day granularity.** An event carries a
-single `event.date` (`YYYY-MM-DD`); the [`AssignmentTracker`](../src/utils/rosterGenerator/assignmentTracker.js)
-buckets by that date, and a member's unavailability is a set of **day keys**
-(`expandUnavailableDays` in [`calendarUtils.js`](../src/utils/calendarUtils.js)
-already supports a `{ start, end }` range, but of *whole days*). This encodes an
-implicit assumption: **one event per day per member**. Two events on the same day
-therefore *collide* under any same-day rule (once-per-event, and the future
-cross-team clash), even when they are a morning and an evening service that don't
-actually overlap.
+**Model (implemented): a half-open datetime interval per event.** An event's
+time span is resolved by [`eventInterval`](../src/utils/constraintPrimitives.js)
+to `[start, end)` in epoch ms. The fields are **additive and lossless**: an event
+may carry explicit `start`/`end` datetime strings, but a bare `event.date`
+(`YYYY-MM-DD`) is the whole-day range `[date 00:00, date+1 00:00)`. Parsing is
+local-midnight (never `new Date('YYYY-MM-DD')`, which is UTC), matching the
+`parseDayKey` invariant in [`calendarUtils.js`](../src/utils/calendarUtils.js) so
+a day can't slip a timezone. Member unavailability remains a set of **day keys**
+(`expandUnavailableDays`, which already supports a whole-day `{ start, end }`).
 
-**Planned change (not yet built): datetime ranges.** Move events and blockouts
-from a bare date to a **`{ start, end }` datetime range** so the model can hold
-multiple, non-overlapping events in a day. Design decisions to hold to when this
-lands:
+### Design decisions
 
-- **Clash = interval overlap, not date-equality.** Two slots (or a slot and a
-  blockout, or a slot and a cross-team assignment) conflict iff their `[start,
-  end)` ranges overlap. This **subsumes** today's behaviour: a bare date is the
-  range `[date 00:00, date+1 00:00)`, so date-only inputs keep colliding exactly
-  as before. This is the single rule the future cross-team clash check
+- **Clash = interval overlap, not date-equality.** Two events conflict iff their
+  `[start, end)` ranges overlap, computed by `intervalsOverlap`/`eventsClash` in
+  [`constraintPrimitives.js`](../src/utils/constraintPrimitives.js). Overlap is
+  **half-open**: touching boundaries (`a.end === b.start`) do *not* clash, so
+  back-to-back services are legal. This **subsumes** the old whole-day model —
+  two bare-date events on the same day are two whole-day ranges, so they still
+  clash exactly as before, while a morning and an evening *timed* service on one
+  day no longer do. This is the single rule the future cross-team clash check
   ([multi-tenant.md](multi-tenant.md#compatibility-seam-how-we-avoid-rewriting-the-engine))
-  is written against — which is **why this lands before that phase**, so the
-  clash rule is authored once against intervals.
+  is written against — authored once against intervals.
+- **The clash rule is a hard constraint, enforced via the registry.** It is the
+  `no-clash` (`ENFORCE_NO_CLASH`) **feasibility** descriptor in the `CONSTRAINTS`
+  registry — the generator, validator and manual swap all consume that one
+  descriptor rather than re-implementing overlap. Ownership/architecture of the
+  registry lives in
+  [generation.md](generation.md#hard-constraints-one-authority-many-consumers);
+  this file owns only the *interval semantics* the descriptor is built on.
+  `no-clash` is distinct from `once-per-event`: the latter forbids a member in
+  two slots of **one** event; the former forbids a member in two **different**
+  overlapping events.
 - **Backfill is lossless.** Existing `event.date` and whole-day blockouts map to
-  a whole-day range; `sample.yaml` and the validators must accept both the bare
-  date (back-compat) and the explicit range, the same way member `roles` accept
-  both a string and the object form.
-- **Week/month bucketing keys off `start`.** `getWeekKey`/`byMonth` and the
-  fairness/spread formulas use the range's start instant, so an event that spans
-  midnight is counted in its start's week/month (defined, not ambiguous).
-- **UI may still group by day.** The calendar, month grid, and past-event muting
-  ([`EventsView`](../src/components/EventsView.jsx)) can keep grouping visually by
-  day while the *model* is datetime; time only needs to surface where events share
-  a day. Deciding how much time-of-day the UI exposes is deferred to that change.
-
-Until this lands, all clash/same-day logic remains date-granular and the
-one-event-per-day assumption holds.
+  a whole-day range; `sample.yaml` and the validators accept both the bare date
+  (back-compat) and the explicit `start`/`end` datetimes, the same way member
+  `roles` accept both a string and the object form. `validateDates` checks that
+  any provided datetimes parse and that `start <= end`.
+- **Week/month bucketing keys off `start`.** The fairness/spread counters use the
+  range's start instant, so an event that spans midnight is counted in its
+  start's week/month (defined, not ambiguous). Date-only events are unaffected
+  because their start day *is* their date.
+- **UI still groups by day (time-of-day inputs deferred).** The calendar, month
+  grid, and past-event muting ([`EventsView`](../src/components/EventsView.jsx))
+  keep grouping visually by day while the *model* is datetime. Surfacing
+  time-of-day editing in the UI — and displaying multiple events per day — is a
+  deliberately separate, not-yet-built change.
 
 ## `sample.yaml` is the canonical valid-schema example
 

@@ -52,8 +52,11 @@ hard constraint is modelled once as a descriptor (mirroring `SCORERS`), tagged b
 *when* it applies:
 
 - **`kind: 'feasibility'`** — physically impossible to violate: active/included,
-  role capability, availability, same-event (later same-*time*) clash. Enforced
-  by **all** consumers, including manual swap/self-assign.
+  role capability, availability, once-per-event, and the **time clash** (`no-clash`
+  — a member in two events whose spans overlap; see
+  [data-layer.md](data-layer.md#time-granularity-events-are-datetime-ranges-ui-still-groups-by-day)
+  for the interval semantics). Enforced by **all** consumers, including manual
+  swap/self-assign.
 - **`kind: 'load-cadence'`** — policy caps that a human may deliberately override:
   once-per-week, max-per-month, the understudy-before-role gate. Enforced by the
   **generator** and flagged by the **validator**, but **not** by manual swaps.
@@ -86,7 +89,11 @@ whole-roster scan of `allEvents` (no running tally on a finished roster). To kee
 the rule defined once, the descriptor calls a small **uniform counting interface**
 the consumer supplies on `ctx` — `currentRoster(placement)`,
 `weeklyCount(memberId, date)`, `monthlyCount(memberId, date)`,
-`priorUnderstudySessions(memberId, baseRole, date)`. Only the plumbing differs,
+`priorUnderstudySessions(memberId, baseRole, date)`, and
+`overlappingEvents(placement)` (the OTHER events whose span overlaps, powering
+`no-clash` — the generator scans its live sorted events, the validator scans
+`allEvents`, and each excludes the placement's own event so the rule is
+mode-insensitive). Only the plumbing differs,
 never the rule. This is *why* the same predicate can be shared even though the
 generator and validator look nothing alike internally: they are the same check
 asked in different modes over differently-sourced counts. In `would-place` mode

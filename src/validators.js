@@ -240,6 +240,19 @@ export const validateDates = (data) => {
       if (event.date && !dateRegex.test(event.date)) {
         errors.push(`Event #${index + 1}: Invalid date format "${event.date}" (expected YYYY-MM-DD)`)
       }
+      // Optional datetime range (see specs/data-layer.md, "Time granularity").
+      // When present it must parse; a start after its end is nonsensical.
+      const startMs = event.start ? new Date(event.start).getTime() : null
+      const endMs = event.end ? new Date(event.end).getTime() : null
+      if (event.start && Number.isNaN(startMs)) {
+        errors.push(`Event #${index + 1}: Invalid start datetime "${event.start}"`)
+      }
+      if (event.end && Number.isNaN(endMs)) {
+        errors.push(`Event #${index + 1}: Invalid end datetime "${event.end}"`)
+      }
+      if (startMs != null && endMs != null && !Number.isNaN(startMs) && !Number.isNaN(endMs) && startMs > endMs) {
+        errors.push(`Event #${index + 1}: start datetime must not be after end datetime`)
+      }
     })
   }
 

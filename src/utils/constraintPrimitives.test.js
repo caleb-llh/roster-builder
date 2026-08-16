@@ -10,8 +10,61 @@ import {
   countMonthlyAssignments,
   getWeekAssignments,
   areConsecutiveWeekends,
-  getMembersWithMultipleRoles
+  getMembersWithMultipleRoles,
+  eventInterval,
+  intervalsOverlap,
+  eventsClash
 } from './constraintPrimitives'
+
+describe('interval model', () => {
+  describe('eventInterval', () => {
+    it('treats a bare date as the whole local day [00:00, next 00:00)', () => {
+      const { start, end } = eventInterval({ date: '2026-04-01' })
+      expect(new Date(start).getHours()).toBe(0)
+      expect(end - start).toBe(24 * 60 * 60 * 1000)
+    })
+    it('uses explicit start/end datetimes when present', () => {
+      const iv = eventInterval({ date: '2026-04-01', start: '2026-04-01T18:00', end: '2026-04-01T20:00' })
+      expect(iv.end - iv.start).toBe(2 * 60 * 60 * 1000)
+    })
+    it('returns null for an unparseable event', () => {
+      expect(eventInterval(null)).toBeNull()
+      expect(eventInterval({})).toBeNull()
+    })
+  })
+
+  describe('intervalsOverlap (half-open)', () => {
+    const a = { start: 0, end: 10 }
+    it('overlaps when ranges intersect', () => {
+      expect(intervalsOverlap(a, { start: 5, end: 15 })).toBe(true)
+    })
+    it('does NOT overlap on a touching boundary (back-to-back)', () => {
+      expect(intervalsOverlap(a, { start: 10, end: 20 })).toBe(false)
+    })
+    it('does not overlap when disjoint', () => {
+      expect(intervalsOverlap(a, { start: 20, end: 30 })).toBe(false)
+    })
+  })
+
+  describe('eventsClash', () => {
+    it('two same-day bare-date events clash (subsumes the old model)', () => {
+      expect(eventsClash({ date: '2026-04-01' }, { date: '2026-04-01' })).toBe(true)
+    })
+    it('different bare-date days do not clash', () => {
+      expect(eventsClash({ date: '2026-04-01' }, { date: '2026-04-02' })).toBe(false)
+    })
+    it('same-day non-overlapping timed events do not clash', () => {
+      const morning = { date: '2026-04-01', start: '2026-04-01T09:00', end: '2026-04-01T11:00' }
+      const evening = { date: '2026-04-01', start: '2026-04-01T18:00', end: '2026-04-01T20:00' }
+      expect(eventsClash(morning, evening)).toBe(false)
+    })
+    it('same-day overlapping timed events clash', () => {
+      const a = { date: '2026-04-01', start: '2026-04-01T09:00', end: '2026-04-01T12:00' }
+      const b = { date: '2026-04-01', start: '2026-04-01T11:00', end: '2026-04-01T13:00' }
+      expect(eventsClash(a, b)).toBe(true)
+    })
+  })
+})
 
 describe('constraintPrimitives', () => {
   describe('getMondayOfWeek', () => {

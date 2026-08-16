@@ -3,7 +3,8 @@
  */
 
 import { 
-  isAssignedToEvent
+  isAssignedToEvent,
+  eventsClash
 } from '../constraintPrimitives'
 import { CONSTRAINT_KEYS, isConstraintEnabled } from '../../schema/rosterSchema'
 import { understudySlotRole, isRoleCapable } from '../understudy'
@@ -15,6 +16,12 @@ export class EligibilityChecker {
     this.memberConstraints = constraints
     this.rosterConstraints = rosterConstraints
     this.tracker = tracker
+    // The live (chronologically-sorted) events array being filled. Kept as a
+    // reference so the clash constraint can scan for OTHER events overlapping a
+    // placement's event; RosterState mutates these in place, so the scan always
+    // reflects the current assignments. Empty by default (some call sites build
+    // a checker without events, e.g. stats — the clash rule then finds nothing).
+    this.events = options.events || []
     // Cross-team seam (multi-tenant Phase 0): a read-only snapshot of the
     // member's assignments in OTHER teams (`{ memberId: [dateOrDatetime, ...] }`).
     // The single cross-team primitive — any load/cap count is derived from it,
@@ -57,6 +64,7 @@ export class EligibilityChecker {
       getConstraint('understudy-before-role'),
       getConstraint('availability'),
       getConstraint('once-per-event'),
+      getConstraint('no-clash'),
       getConstraint('once-per-week'),
       getConstraint('max-per-month'),
     ]) {
@@ -83,6 +91,12 @@ export class EligibilityChecker {
   priorUnderstudySessions(memberId, baseRole, date) {
     return this.tracker.getRoleCountBefore(memberId, understudySlotRole(baseRole), date)
   }
+  // OTHER events whose time span overlaps the placement's event. Scans the live
+  // events reference (excluding the same event object) so the clash constraint
+  // sees current assignments. Same-event duplicates are once-per-event's job.
+  overlappingEvents(placement) {
+    return this.events.filter(e => e !== placement.event && eventsClash(e, placement.event))
+  }
 
   // Generator-specific wording for each violation code (kept close to prior
   // messages so existing behaviour/tests are preserved).
@@ -91,6 +105,7 @@ export class EligibilityChecker {
     switch (code) {
       case 'unavailable': return 'Member unavailable on this date'
       case 'once-per-event': return 'Member already assigned to another role on this event'
+      case 'clash': return `Member already assigned to an overlapping event (${violation.params.otherDate})`
       case 'once-per-week': return 'Member already assigned this week'
       case 'max-per-month': return `Member has reached max assignments this month (${params.cap})`
       case 'understudy-before-role':

@@ -124,6 +124,56 @@ export const getAvailableMembersForEvent = (event, members, constraints, allEven
 }
 
 /**
+ * Resolve an event's time span as a half-open millisecond interval `[start, end)`.
+ *
+ * The model is additive and lossless (see specs/data-layer.md, "Time
+ * granularity"): an event may carry explicit `start`/`end` datetime strings, but
+ * a bare `date` (`YYYY-MM-DD`) is the whole-day range `[date 00:00, date+1 00:00)`.
+ * Date-only inputs therefore keep colliding exactly as before — the interval
+ * rule *subsumes* the old same-day behaviour. Parsing is local-midnight (never
+ * `new Date('YYYY-MM-DD')`, which is UTC) so a day can't slip in a negative-offset
+ * timezone, matching the calendar's `parseDayKey` invariant.
+ *
+ * @returns {{ start: number, end: number } | null} epoch ms, or null if unparseable.
+ */
+export const eventInterval = (event) => {
+  if (!event) return null
+
+  // Explicit datetime range takes precedence when present.
+  if (event.start) {
+    const start = new Date(event.start).getTime()
+    // A missing/blank end means an instantaneous point → zero-width at start.
+    const end = event.end ? new Date(event.end).getTime() : start
+    if (Number.isNaN(start) || Number.isNaN(end)) return null
+    return { start, end: Math.max(start, end) }
+  }
+
+  if (!event.date) return null
+  const [y, m, d] = String(event.date).split('-').map(Number)
+  if (!y || !m || !d) return null
+  const start = new Date(y, m - 1, d).getTime()
+  const end = new Date(y, m - 1, d + 1).getTime() // next local midnight
+  return { start, end }
+}
+
+/**
+ * Do two half-open intervals `[start, end)` overlap? Touching boundaries
+ * (a.end === b.start) do NOT overlap — back-to-back services are not a clash.
+ */
+export const intervalsOverlap = (a, b) => {
+  if (!a || !b) return false
+  return a.start < b.end && b.start < a.end
+}
+
+/**
+ * Do two events' time spans overlap? This is the single clash rule every
+ * placement-time consumer (generator, validator, swap) and the future
+ * cross-team clash check are written against.
+ */
+export const eventsClash = (eventA, eventB) =>
+  intervalsOverlap(eventInterval(eventA), eventInterval(eventB))
+
+/**
  * Get Monday of the week for a given date
  * Week starts on Monday and ends on Sunday
  */

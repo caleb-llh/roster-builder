@@ -329,11 +329,15 @@ keeps `npx vitest run` + `npm run build` green.
   lock in the no-op: the full suite stays green, `resolveDerivedState` is proven
   identical to `getDerivedState`, and an empty `externalAssignments` produces
   byte-for-byte identical generator output.
-- **Datetime-range model (prerequisite for Phase 2 clash).** Move events and
-  blockouts from date-granular to datetime ranges so same-day non-overlapping
-  events don't clash and clash becomes interval-overlap — its own tracked change,
-  owned by [data-layer.md](data-layer.md). Land it before Phase 2 so the
-  cross-team clash rule is written once against intervals.
+- **Datetime-range model + local clash (done — prerequisite for Phase 2 clash).**
+  Events resolve to half-open `[start, end)` intervals so same-day non-overlapping
+  events don't clash, and clash is interval-overlap — landed as the `no-clash`
+  feasibility constraint enforced by the generator, validator and swap
+  ([data-layer.md](data-layer.md) owns the interval semantics;
+  [generation.md](generation.md#hard-constraints-one-authority-many-consumers)
+  owns the registry). The rule is written once against intervals, so Phase 2's
+  cross-team clash is the *same* rule extended to fold in `externalAssignments`,
+  not a new one.
 - **Phase 1 — local model.** New nested YAML shape + `getDerivedState`
   resolver + updated `sample.yaml`; MembersView split (registry vs. team
   membership); global unavailability; team selector above roster selector.

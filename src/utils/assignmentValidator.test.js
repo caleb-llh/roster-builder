@@ -154,6 +154,39 @@ describe('assignmentValidator', () => {
     })
   })
 
+  describe('ENFORCE_NO_CLASH constraint', () => {
+    // Two same-day events overlap (bare dates are whole days), so a member in
+    // both is a clash across events (distinct from once-per-event, which is
+    // within one event).
+    const twoSameDayEvents = () => ([
+      { name: 'Morning', date: '2026-05-10', day_of_week: 'Sunday', roster: [{ role: 'vm', member_id: 'alice' }] },
+      { name: 'Evening', date: '2026-05-10', day_of_week: 'Sunday', roster: [{ role: 'cam-1', member_id: 'alice' }] },
+    ])
+
+    it('flags a member rostered on two overlapping events', () => {
+      const rosterConstraints = { [CONSTRAINT_KEYS.ENFORCE_NO_CLASH]: true }
+      const result = validateEventAssignments(twoSameDayEvents(), mockMembers, [], [], rosterConstraints, {})
+      expect(result['2026-05-10']).toBeDefined()
+      expect(result['2026-05-10'].errors.some(e => e.includes('overlaps this event'))).toBe(true)
+    })
+
+    it('does not flag non-overlapping timed events on the same day', () => {
+      const rosterConstraints = { [CONSTRAINT_KEYS.ENFORCE_NO_CLASH]: true }
+      const events = [
+        { name: 'AM', date: '2026-05-10', start: '2026-05-10T09:00', end: '2026-05-10T11:00', roster: [{ role: 'vm', member_id: 'alice' }] },
+        { name: 'PM', date: '2026-05-10', start: '2026-05-10T18:00', end: '2026-05-10T20:00', roster: [{ role: 'cam-1', member_id: 'alice' }] },
+      ]
+      const result = validateEventAssignments(events, mockMembers, [], [], rosterConstraints, {})
+      expect(result['2026-05-10']).toBeUndefined()
+    })
+
+    it('does not check clash when the constraint is disabled', () => {
+      const rosterConstraints = { [CONSTRAINT_KEYS.ENFORCE_NO_CLASH]: false }
+      const result = validateEventAssignments(twoSameDayEvents(), mockMembers, [], [], rosterConstraints, {})
+      expect(result['2026-05-10']).toBeUndefined()
+    })
+  })
+
   describe('ONLY_ONCE_PER_WEEK constraint', () => {
     it('should detect when member is rostered twice in same week (Mon-Sun)', () => {
       const events = [

@@ -26,6 +26,7 @@ export const CONSTRAINT_KEYS = {
   ENFORCE_MEMBER_ROLES: 'ENFORCE_MEMBER_ROLES',
   ENFORCE_MEMBER_AVAILABILITY: 'ENFORCE_MEMBER_AVAILABILITY',
   ONLY_ONCE_PER_EVENT: 'ONLY_ONCE_PER_EVENT',
+  ENFORCE_NO_CLASH: 'ENFORCE_NO_CLASH',
   ONLY_ONCE_PER_WEEK: 'ONLY_ONCE_PER_WEEK',
   MAX_ASSIGNMENTS_PER_MONTH: 'MAX_ASSIGNMENTS_PER_MONTH',
   ENFORCE_UNDERSTUDY_BEFORE_ROLE: 'ENFORCE_UNDERSTUDY_BEFORE_ROLE',
@@ -43,6 +44,7 @@ const constraintCoercers = {
   [CONSTRAINT_KEYS.ENFORCE_MEMBER_ROLES]: coerceBoolean,
   [CONSTRAINT_KEYS.ENFORCE_MEMBER_AVAILABILITY]: coerceBoolean,
   [CONSTRAINT_KEYS.ONLY_ONCE_PER_EVENT]: coerceBoolean,
+  [CONSTRAINT_KEYS.ENFORCE_NO_CLASH]: coerceBoolean,
   [CONSTRAINT_KEYS.ONLY_ONCE_PER_WEEK]: coerceBoolean,
   [CONSTRAINT_KEYS.MAX_ASSIGNMENTS_PER_MONTH]: coerceNonNegativeInt,
   [CONSTRAINT_KEYS.ENFORCE_UNDERSTUDY_BEFORE_ROLE]: coerceBoolean,
@@ -65,6 +67,12 @@ export const CONSTRAINT_METADATA = {
     label: 'Only Once Per Event',
     description: 'A member cannot be assigned to multiple roles in the same event',
     userFriendly: 'No one gets assigned to multiple roles in the same event',
+    type: 'boolean',
+  },
+  [CONSTRAINT_KEYS.ENFORCE_NO_CLASH]: {
+    label: 'No Overlapping Events',
+    description: 'A member cannot be assigned to two events whose times overlap',
+    userFriendly: "A member can't be in two events that overlap in time",
     type: 'boolean',
   },
   [CONSTRAINT_KEYS.ONLY_ONCE_PER_WEEK]: {

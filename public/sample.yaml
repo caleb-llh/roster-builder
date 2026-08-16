@@ -136,6 +136,21 @@ events:
     date: "2026-03-01"
     day_of_week: "Sunday"
     reporting_time: "9:00 AM"
+    # Optional explicit datetime range. When omitted, the whole day is used.
+    # Two events on the same day only clash if their [start, end) ranges overlap,
+    # so this morning service and the evening one below can share a member.
+    start: "2026-03-01T09:00"
+    end: "2026-03-01T11:00"
+    roster:
+      - role: lead
+        member_id:
+
+  - name: "Evening Service"
+    date: "2026-03-01"
+    day_of_week: "Sunday"
+    reporting_time: "6:00 PM"
+    start: "2026-03-01T18:00"
+    end: "2026-03-01T20:00"
     roster:
       - role: lead
         member_id:

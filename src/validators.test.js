@@ -11,6 +11,7 @@ import {
   validateEventMemberMapping,
   validateRosterPeriod,
   validateMemberConstraints,
+  validateDates,
   runAllValidators
 } from './validators'
 
@@ -211,6 +212,32 @@ describe('validators', () => {
       const result = validateRoles(data)
       
       expect(result.warnings.some(w => w.includes('duplicate'))).toBe(true)
+    })
+  })
+
+  describe('validateDates', () => {
+    it('accepts a bare date with no datetime range', () => {
+      const result = validateDates({ events: [{ name: 'E', date: '2026-03-01' }] })
+      expect(result.errors).toHaveLength(0)
+    })
+
+    it('accepts an event with valid start/end datetimes', () => {
+      const result = validateDates({
+        events: [{ name: 'E', date: '2026-03-01', start: '2026-03-01T09:00', end: '2026-03-01T11:00' }],
+      })
+      expect(result.errors).toHaveLength(0)
+    })
+
+    it('rejects an unparseable start datetime', () => {
+      const result = validateDates({ events: [{ name: 'E', date: '2026-03-01', start: 'not-a-date' }] })
+      expect(result.errors.some(e => e.includes('Invalid start datetime'))).toBe(true)
+    })
+
+    it('rejects a start after its end', () => {
+      const result = validateDates({
+        events: [{ name: 'E', date: '2026-03-01', start: '2026-03-01T20:00', end: '2026-03-01T18:00' }],
+      })
+      expect(result.errors.some(e => e.includes('must not be after end'))).toBe(true)
     })
   })
 

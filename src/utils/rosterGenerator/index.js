@@ -142,6 +142,11 @@ function generateRosterSingleRun(
   // Sort events chronologically
   const sortedEvents = newEvents.sort((a, b) => new Date(a.date) - new Date(b.date))
   
+  // The eligibility checker's clash constraint scans OTHER events for time
+  // overlap; give it the live sorted array (mutated in place by RosterState) so
+  // the scan reflects current assignments.
+  eligibilityChecker.events = sortedEvents
+  
   // Reversible state layer: all assignments go through applyMove so the tracker
   // and events stay in lock-step (and so the same primitives power local search).
   const state = new RosterState(sortedEvents, tracker)

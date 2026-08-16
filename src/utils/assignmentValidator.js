@@ -14,7 +14,8 @@ import {
   getMembersWithMultipleRoles,
   getWeekAssignments,
   countMonthlyAssignments,
-  areConsecutiveWeekends
+  areConsecutiveWeekends,
+  eventsClash
 } from './constraintPrimitives'
 import { PREFERENCE_KEYS, isPreferenceEnabled, MEMBER_PREF_FIELDS } from '../schema/rosterSchema'
 import { countUnderstudySessionsBefore } from './understudy'
@@ -133,9 +134,13 @@ const checkRosterConstraints = (event, allEvents, rosterConstraints, members) =>
     currentRoster: () => event.roster.filter(r => r.member_id && r.role !== excludeRole),
     weeklyCount: (memberId, date) => getWeekAssignments(memberId, date, allEvents).length,
     monthlyCount: (memberId, date) => countMonthlyAssignments(memberId, date, allEvents),
+    // OTHER events whose time span overlaps this one (excludes it by identity).
+    overlappingEvents: (placement) =>
+      allEvents.filter(e => e !== placement.event && eventsClash(e, placement.event)),
   })
 
   const oncePerEvent = getConstraint('once-per-event')
+  const noClash = getConstraint('no-clash')
   const oncePerWeek = getConstraint('once-per-week')
   const maxPerMonth = getConstraint('max-per-month')
   
@@ -152,6 +157,18 @@ const checkRosterConstraints = (event, allEvents, rosterConstraints, members) =>
   const assignedMemberIds = event.roster
     .filter(r => r.member_id)
     .map(r => r.member_id)
+
+  // ENFORCE_NO_CLASH — registry decides (member in an overlapping OTHER event);
+  // the validator names the clashing event's date so the message is actionable.
+  if (noClash.enabled(makeCtx())) {
+    const ctx = makeCtx()
+    assignedMemberIds.forEach(memberId => {
+      const violation = noClash.check({ memberId, role: null, event }, ctx, CONSTRAINT_MODES.IS_PLACED)
+      if (!violation) return
+      const member = members.find(m => m.id === memberId)
+      errors.push(`${member?.name || memberId} is also rostered on ${violation.params.otherDate}, which overlaps this event`)
+    })
+  }
   
   // ONLY_ONCE_PER_WEEK — registry decides (IS_PLACED: count-in-week > 1); the
   // validator enumerates the other in-week events for the message.

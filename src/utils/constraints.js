@@ -1,11 +1,11 @@
 /**
- * Hard-constraint registry — one authority, three consumers.
+ * Hard-constraint registry — one authority, many consumers.
  *
  * Each constraint is a single descriptor; the generator (EligibilityChecker),
- * the validator (assignmentValidator), and manual swap/self-assign (explainSwap)
- * are *consumers* of this one list rather than re-owners of the rules. See the
- * "Hard constraints: one authority, three consumers" decision in
- * specs/generation.md for the rationale and the ratified shape.
+ * the validator (assignmentValidator), manual swap/self-assign (explainSwap),
+ * and the assignment dropdown are *consumers* of this one list rather than
+ * re-owners of the rules. See the "Hard constraints: one authority, many
+ * consumers" decision in specs/generation.md for the rationale and shape.
  *
  * Descriptor shape:
  *   {
@@ -16,7 +16,8 @@
  *   }
  *
  * - `kind: 'feasibility'` — physically impossible to violate (availability, role,
- *   active, same-event clash). Enforced by ALL consumers, including manual swaps.
+ *   active, same-time clash, once-per-event). Enforced by ALL consumers,
+ *   including manual swaps.
  * - `kind: 'load-cadence'` — policy caps a human may deliberately override
  *   (week/month, understudy gate). Enforced by generator + validator, NOT swaps.
  *
@@ -30,10 +31,6 @@
  * A violation is STRUCTURED — `{ code, params }` — never a formatted sentence.
  * Each consumer renders its own wording via `formatViolation` (or its own map),
  * so the toast, the validator line, and the log can differ and stay i18n-ready.
- *
- * NOTE: Incremental rollout — only `availability` is migrated so far; the other
- * rules still live in EligibilityChecker/assignmentValidator/explainSwap and are
- * ported one at a time. See specs/generation.md.
  */
 
 import { isMemberAvailable } from './constraintPrimitives'
@@ -61,6 +58,9 @@ export const CONSTRAINT_MODES = {
  *   ctx.monthlyCount(memberId, date)          -> assignments in that month
  *   ctx.priorUnderstudySessions(memberId, baseRole, date) -> understudy sessions
  *                                                            strictly before date
+ *   ctx.overlappingEvents(placement)          -> OTHER events whose time span
+ *                                                overlaps the placement's event
+ *                                                (excludes that event itself)
  * In 'would-place' mode the counts EXCLUDE the placement being considered (it is
  * not yet recorded); in 'is-placed' mode they INCLUDE it (it is already in the
  * roster). That is exactly why the comparison is `count >= cap` (would-place)
@@ -94,6 +94,32 @@ export const CONSTRAINTS = [
       const roster = ctx.currentRoster(placement)
       if (roster.some(s => s.member_id === placement.memberId)) {
         return { code: 'once-per-event', params: { memberId: placement.memberId, date: placement.event.date } }
+      }
+      return null
+    },
+  },
+  {
+    key: 'no-clash',
+    kind: 'feasibility',
+    enabled: (ctx) => isConstraintEnabled(ctx.rosterConstraints, CONSTRAINT_KEYS.ENFORCE_NO_CLASH),
+    // A member cannot be in two events whose time spans overlap. once-per-event
+    // already covers duplicates WITHIN one event; this covers the ACROSS-event
+    // case using the half-open interval rule (a bare-date event is a whole day,
+    // so two same-day events clash exactly as the old one-event-per-day model
+    // assumed). Time span, not date-equality, is the rule — see
+    // eventInterval/eventsClash in constraintPrimitives. Mode is irrelevant: the
+    // consumer's overlappingEvents excludes the placement's own event, so the
+    // question "is this member in ANOTHER overlapping event?" is the same whether
+    // predicting a placement or diagnosing one.
+    check: (placement, ctx) => {
+      const clashers = ctx.overlappingEvents(placement)
+      for (const other of clashers) {
+        if (other.roster?.some(s => s.member_id === placement.memberId)) {
+          return {
+            code: 'clash',
+            params: { memberId: placement.memberId, date: placement.event.date, otherDate: other.date },
+          }
+        }
       }
       return null
     },
@@ -222,6 +248,8 @@ export function formatViolation(violation, nameOf = (id) => id) {
       return `${name} is unavailable on ${params.date}.`
     case 'once-per-event':
       return `${name} is already rostered on ${params.date}.`
+    case 'clash':
+      return `${name} is already rostered on an overlapping event (${params.otherDate}).`
     case 'once-per-week':
       return `${name} is already rostered that week.`
     case 'max-per-month':

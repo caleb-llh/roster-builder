@@ -92,6 +92,7 @@ describe('registry integrity', () => {
     expect(CONSTRAINTS.map(c => c.key)).toEqual([
       'availability',
       'once-per-event',
+      'no-clash',
       'once-per-week',
       'max-per-month',
       'understudy-before-role',
@@ -160,6 +161,45 @@ describe('once-per-event descriptor', () => {
   })
   it('passes a member not yet in the event', () => {
     expect(rule.check({ memberId: 'm2', role: 'cam', event: { date: 'd' } }, ctx([]), CONSTRAINT_MODES.WOULD_PLACE)).toBeNull()
+  })
+})
+
+describe('no-clash descriptor', () => {
+  const rule = getConstraint('no-clash')
+  const target = { date: '2026-04-01', roster: [] }
+  // Same-day event the member is already in → overlaps (bare dates are whole days).
+  const otherSameDay = { date: '2026-04-01', roster: [{ role: 'lead', member_id: 'm1' }] }
+  const ctx = (clashers) => ({
+    rosterConstraints: { ENFORCE_NO_CLASH: true },
+    overlappingEvents: () => clashers,
+  })
+
+  it('is a feasibility constraint', () => {
+    expect(rule.kind).toBe('feasibility')
+  })
+
+  it('flags a member already in an overlapping event', () => {
+    const v = rule.check({ memberId: 'm1', role: 'cam', event: target }, ctx([otherSameDay]), CONSTRAINT_MODES.WOULD_PLACE)
+    expect(v).toEqual({ code: 'clash', params: { memberId: 'm1', date: '2026-04-01', otherDate: '2026-04-01' } })
+  })
+
+  it('ignores overlapping events the member is not in', () => {
+    const otherWithoutMember = { date: '2026-04-01', roster: [{ role: 'lead', member_id: 'm2' }] }
+    expect(rule.check({ memberId: 'm1', role: 'cam', event: target }, ctx([otherWithoutMember]), CONSTRAINT_MODES.WOULD_PLACE)).toBeNull()
+  })
+
+  it('passes when there are no overlapping events', () => {
+    expect(rule.check({ memberId: 'm1', role: 'cam', event: target }, ctx([]), CONSTRAINT_MODES.WOULD_PLACE)).toBeNull()
+  })
+
+  it('is mode-insensitive (overlappingEvents already excludes self)', () => {
+    const would = rule.check({ memberId: 'm1', role: 'cam', event: target }, ctx([otherSameDay]), CONSTRAINT_MODES.WOULD_PLACE)
+    const isPlaced = rule.check({ memberId: 'm1', role: 'cam', event: target }, ctx([otherSameDay]), CONSTRAINT_MODES.IS_PLACED)
+    expect(isPlaced).toEqual(would)
+  })
+
+  it('is disabled when the flag is absent', () => {
+    expect(rule.enabled({ rosterConstraints: {} })).toBe(false)
   })
 })
 
