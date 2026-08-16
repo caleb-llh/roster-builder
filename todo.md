@@ -74,10 +74,10 @@
 
 ---
 TODO:
-- make everything editable
 - refactor data model
+- make everything editable
 - mobile view
 - deploy backend
+- deploy frontend (TMA)
 - add roster bot
-- google auth onboarding process
 

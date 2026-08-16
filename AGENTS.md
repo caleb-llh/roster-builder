@@ -3,6 +3,8 @@
 This file governs how any agent (human or AI) works in this repository. Its
 central rule: **the spec is binding, and every change feeds back into it.**
 
+Always clarify where there is ambiguity.
+
 ## The spec
 
 The **binding specification** lives in [`specs/`](specs/) — one file per domain,
@@ -62,7 +64,7 @@ session — the root cause, the reason a naive approach failed, the reason a
 weight/threshold has the value it does — belongs in the spec so it is not
 rediscovered later.
 
-Recommend updates to this feedback loop if there is room for improvements to the harness.
+Propose updates to this feedback loop if there is room for improvements to the harness.
 
 ### When to add a Design Decision entry
 
