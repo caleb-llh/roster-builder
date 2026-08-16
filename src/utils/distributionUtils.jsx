@@ -68,6 +68,78 @@ export function calculateDistribution(generationResult, members) {
   }
 }
 
+// Shared slate ramp for the roster-stats visuals. Its deepest endpoint is
+// intentionally aligned to the availability heatmap's darkest slate so the
+// compact charts share one common "maximum concern" shade.
+const STATS_SLATE_LIGHT = { h: 215, s: 16, l: 80, a: 0.72 }
+const STATS_SLATE_DEEP = { h: 215, s: 25, l: 30, a: 0.72 }
+
+const clamp01 = (n) => Math.min(1, Math.max(0, n))
+
+export function normalizeMetricRange(value, min, max, fallback = 0.5) {
+  if (!Number.isFinite(value)) return fallback
+  if (!Number.isFinite(min) || !Number.isFinite(max) || max <= min) return fallback
+  return clamp01((value - min) / (max - min))
+}
+
+const mixStatSlate = (concern) => {
+  const t = clamp01(concern)
+  const s = STATS_SLATE_LIGHT.s + (STATS_SLATE_DEEP.s - STATS_SLATE_LIGHT.s) * t
+  const l = STATS_SLATE_LIGHT.l + (STATS_SLATE_DEEP.l - STATS_SLATE_LIGHT.l) * t
+  const a = STATS_SLATE_LIGHT.a + (STATS_SLATE_DEEP.a - STATS_SLATE_LIGHT.a) * t
+  return `hsla(${STATS_SLATE_LIGHT.h}, ${s.toFixed(0)}%, ${l.toFixed(0)}%, ${a.toFixed(2)})`
+}
+
+const tintTowardsLight = (concern, delta = 12) => {
+  const t = clamp01(concern)
+  const lBase = STATS_SLATE_LIGHT.l + (STATS_SLATE_DEEP.l - STATS_SLATE_LIGHT.l) * t
+  const l = Math.max(18, Math.min(92, lBase + delta))
+  const s = STATS_SLATE_LIGHT.s + (STATS_SLATE_DEEP.s - STATS_SLATE_LIGHT.s) * t
+  return `hsla(${STATS_SLATE_LIGHT.h}, ${s.toFixed(0)}%, ${l.toFixed(0)}%, 0.72)`
+}
+
+export function distributionConcern(shiftCount, minShiftCount, maxShiftCount) {
+  if (!Number.isFinite(shiftCount)) return 0
+  return normalizeMetricRange(shiftCount, minShiftCount, maxShiftCount, 0.5)
+}
+
+export function roleRotationConcern(rotationRatio) {
+  return clamp01(1 - (rotationRatio ?? 0))
+}
+
+export function spacingDotConcern(assignmentDates, index, periodSpanMs) {
+  if (!Array.isArray(assignmentDates) || assignmentDates.length <= 1 || !Number.isFinite(periodSpanMs) || periodSpanMs <= 0) {
+    return 0.12
+  }
+  const current = new Date(assignmentDates[index]?.date).getTime()
+  if (!Number.isFinite(current)) return 0.12
+  const prev = index > 0 ? new Date(assignmentDates[index - 1]?.date).getTime() : null
+  const next = index < assignmentDates.length - 1 ? new Date(assignmentDates[index + 1]?.date).getTime() : null
+  const gaps = [prev, next]
+    .filter(Number.isFinite)
+    .map(t => Math.abs(t - current))
+  if (gaps.length === 0) return 0.12
+  const nearestGap = Math.min(...gaps)
+  // Compare the nearest gap to the member's own "expected" spacing across the
+  // roster period. This is easier to distinguish than a raw period-relative
+  // scale, which made most dots look similarly intense.
+  const expectedGap = periodSpanMs / Math.max(1, assignmentDates.length)
+  const closeness = 1 - clamp01(nearestGap / Math.max(expectedGap, 1))
+  return clamp01(closeness * 0.75)
+}
+
+export function verticalConcernGradient(concern) {
+  return `linear-gradient(to top, ${mixStatSlate(concern)}, ${tintTowardsLight(concern, 10)})`
+}
+
+export function horizontalConcernGradient(concern) {
+  return `linear-gradient(to right, ${mixStatSlate(concern)}, ${tintTowardsLight(concern, 10)})`
+}
+
+export function fullTrackConcernGradient() {
+  return `linear-gradient(to right, ${mixStatSlate(1)}, ${mixStatSlate(0)})`
+}
+
 /**
  * Render bell curve bars
  * @param {Array} sortedDistribution - Sorted distribution array with memberIds
@@ -92,6 +164,8 @@ export function BellCurveChart({ sortedDistribution, maxMemberCount, members = [
     const member = members.find(m => m.id === memberId)
     return member?.name || memberId
   }
+  const minShiftCount = Math.min(...sortedDistribution.map(d => d.shiftCount))
+  const maxShiftCount = Math.max(...sortedDistribution.map(d => d.shiftCount))
 
   return (
     <div className="relative">
@@ -102,6 +176,7 @@ export function BellCurveChart({ sortedDistribution, maxMemberCount, members = [
           const maxBarHeight = 72
           const heightPixels = Math.max((memberCount / maxMemberCount) * maxBarHeight, 8)
           const isHovered = hoveredBar === shiftCount
+          const concern = distributionConcern(shiftCount, minShiftCount, maxShiftCount)
           
           return (
             <div 
@@ -121,9 +196,8 @@ export function BellCurveChart({ sortedDistribution, maxMemberCount, members = [
                 }`}
                 style={{
                   height: `${heightPixels}px`,
-                  background: isHovered
-                    ? 'linear-gradient(to top, #64748b, #94a3b8)'
-                    : 'linear-gradient(to top, #94a3b8, #cbd5e1)'
+                  background: verticalConcernGradient(concern),
+                  filter: isHovered ? 'brightness(0.95)' : undefined,
                 }}
               />
               <div className="text-xs font-semibold text-gray-700">{shiftCount}</div>
@@ -162,7 +236,7 @@ export function BellCurveChart({ sortedDistribution, maxMemberCount, members = [
  * once several roles tracked each other; a grid keeps every role on its own row
  * and makes the planning signal — the thin/short cells — pop. Red is reserved
  * for real trouble (short / exactly-enough); coverable cells get a CONTINUOUS
- * single-hue (slate) ramp that deepens with THIS roster's slack range.
+ * single-hue (slate) ramp that darkens when the still-coverable bench is thin.
  *
  * @param {{ dates: string[], series: Array<{role, counts:number[], required:number[], slack:number[]}>, scale: {min:number,max:number} }} data
  */
@@ -218,14 +292,14 @@ export function AvailabilityHeatmap({ data }) {
         ))}
       </div>
 
-      {/* Legend: reserved red for short/exactly-enough, a continuous amber→
-          emerald gradient for coverable cells (normalized to this roster),
+      {/* Legend: reserved red for short/exactly-enough, a continuous
+          low-cover→high-cover slate gradient for coverable cells,
           neutral slate for no demand. */}
       <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 justify-center text-[11px] text-slate-500">
         <span className="flex items-center gap-1"><span className="inline-block h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: 'rgba(220,38,38,0.62)' }} /> short / exactly enough</span>
         <span className="flex items-center gap-1">
           <span className="text-slate-400">low</span>
-          <span className="inline-block h-2.5 w-16 rounded-sm" style={{ backgroundImage: 'linear-gradient(to right, hsla(215,16%,74%,0.72), hsla(215,25%,28%,0.72))' }} />
+          <span className="inline-block h-2.5 w-16 rounded-sm" style={{ backgroundImage: 'linear-gradient(to right, hsla(215,25%,28%,0.72), hsla(215,16%,74%,0.72))' }} />
           <span className="text-slate-400">high cover</span>
         </span>
         <span className="flex items-center gap-1"><span className="inline-block h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: 'rgba(226,232,240,0.6)' }} /> no demand</span>

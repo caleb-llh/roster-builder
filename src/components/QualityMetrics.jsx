@@ -1,4 +1,10 @@
-import { calculateDistribution, BellCurveChart } from '../utils/distributionUtils.jsx'
+import {
+  calculateDistribution,
+  BellCurveChart,
+  spacingDotConcern,
+  normalizeMetricRange,
+  fullTrackConcernGradient,
+} from '../utils/distributionUtils.jsx'
 import { tierTitle, tierSection, tierUnit, helperText, glassCard, glassPopup, glassArrow } from '../utils/statsTheme'
 
 /**
@@ -30,8 +36,8 @@ export default function QualityMetrics({ generationResult, members, stats, showR
   if (compact) {
     // Compact view for RosterStatsPanel
     // Time Spacing timeline: plot each member's shift dates as dots on a shared
-    // date axis (roster period). Clustering is read visually — tightly packed
-    // dots = bunched shifts, evenly spread dots = good spacing.
+    // date axis (roster period). Tightly packed dots are darker, but the ramp is
+    // intentionally softened so medium spacing differences remain readable.
     const timelineMembers = (stats?.memberStats || []).filter(m => m.assignmentDates?.length > 0)
     const periodStartMs = stats?.periodStart ? new Date(stats.periodStart).getTime() : null
     const periodEndMs = stats?.periodEnd ? new Date(stats.periodEnd).getTime() : null
@@ -50,13 +56,18 @@ export default function QualityMetrics({ generationResult, members, stats, showR
         : `${weeks} week${weeks === 1 ? '' : 's'}`
       return { days, label }
     }
+    const rawDotConcerns = timelineMembers.flatMap(member =>
+      member.assignmentDates.map((_, i) => spacingDotConcern(member.assignmentDates, i, periodSpan))
+    )
+    const dotConcernMin = rawDotConcerns.length ? Math.min(...rawDotConcerns) : 0
+    const dotConcernMax = rawDotConcerns.length ? Math.max(...rawDotConcerns) : 1
 
     return (
       <div className="space-y-4">
         {/* Bell Curve */}
         <div>
-          <div className={`${tierSection} mb-2`}>Shift Distribution</div>
           <div className={`${glassCard} p-4`}>
+            <div className={`${tierSection} mb-3`}>Shift Distribution</div>
             <BellCurveChart sortedDistribution={sortedDistribution} maxMemberCount={maxMemberCount} members={members} />
             <div className={`text-center ${tierUnit} mt-2`}>
               Shifts per member (Avg: {averageShifts})
@@ -67,7 +78,7 @@ export default function QualityMetrics({ generationResult, members, stats, showR
         {/* Time Spacing — a timeline of dots per member. Position encodes when
             each shift falls in the roster period, so clustering is intuitive. */}
         {timelineMembers.length > 0 && periodSpan != null && (
-          <div className="pt-4 border-t border-gray-200">
+          <div className={`${glassCard} p-4`}>
             <div className={`${tierSection} mb-3`}>Time Spacing</div>
             {/* pt-6 leaves room for the first row's tooltip (it sits above the
                 dot); no overflow clipping so tooltips aren't cut off. */}
@@ -95,16 +106,26 @@ export default function QualityMetrics({ generationResult, members, stats, showR
                         </span>
                       )
                     })}
-                    {member.assignmentDates.map((d, i) => (
-                      <span
-                        key={`${d.date}#${i}`}
-                        className="group/tt absolute top-1/2 z-10 -translate-x-1/2 -translate-y-1/2 hover:z-40"
-                        style={{ left: `${datePct(d.date)}%` }}
-                      >
-                        <span className="block h-2.5 w-2.5 rounded-full border border-slate-400/80 bg-slate-400/20 backdrop-blur-sm" />
-                        <Tooltip>{d.role ? `${d.date} · ${d.role}` : d.date}</Tooltip>
-                      </span>
-                    ))}
+                    {member.assignmentDates.map((d, i) => {
+                      const rawConcern = spacingDotConcern(member.assignmentDates, i, periodSpan)
+                      const concern = normalizeMetricRange(rawConcern, dotConcernMin, dotConcernMax, rawConcern)
+                      return (
+                        <span
+                          key={`${d.date}#${i}`}
+                          className="group/tt absolute top-1/2 z-10 -translate-x-1/2 -translate-y-1/2 hover:z-40"
+                          style={{ left: `${datePct(d.date)}%` }}
+                        >
+                          <span
+                            className="block h-2.5 w-2.5 rounded-full backdrop-blur-sm"
+                            style={{
+                              backgroundColor: `hsla(215, ${(15 + concern * 10).toFixed(0)}%, ${(92 - concern * 62).toFixed(0)}%, ${(0.42 + concern * 0.30).toFixed(2)})`,
+                              border: `1px solid hsla(215, ${(18 + concern * 7).toFixed(0)}%, ${(68 - concern * 24).toFixed(0)}%, ${(0.56 + concern * 0.16).toFixed(2)})`,
+                            }}
+                          />
+                          <Tooltip>{d.role ? `${d.date} · ${d.role}` : d.date}</Tooltip>
+                        </span>
+                      )
+                    })}
                   </div>
                 </div>
               ))}
@@ -114,9 +135,12 @@ export default function QualityMetrics({ generationResult, members, stats, showR
 
         {/* Role Rotation Quality — one bar per role showing the rotation ratio
             (distinct members ÷ shifts). Full bar = every shift went to a
-            different person; short bar = the same few people repeat the role. */}
+            different person; short bar = the same few people repeat the role.
+            The filled width shows the ratio; every bar uses the SAME full-width
+            dark→light track gradient, so the left edge intensity is identical
+            across rows and only the amount of track reached varies. */}
         {showRoleDiversity && stats?.roleDiversity?.roleStats && (
-          <div className="pt-4 border-t border-gray-200">
+          <div className={`${glassCard} p-4`}>
             <div className={`${tierSection} mb-3`}>Role Rotation Quality</div>
             <div className="space-y-2">
               {stats.roleDiversity.roleStats
@@ -130,10 +154,13 @@ export default function QualityMetrics({ generationResult, members, stats, showR
                         {roleStat.uniqueMembers}/{roleStat.totalAssignments} · {Math.round(roleStat.rotationRatio * 100)}%
                       </span>
                     </div>
-                    <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                    <div
+                      className="relative h-2 bg-slate-100 rounded-full overflow-hidden"
+                      style={{ backgroundImage: fullTrackConcernGradient() }}
+                    >
                       <div
-                        className="h-full rounded-full bg-gradient-to-r from-slate-300 to-slate-500 transition-all"
-                        style={{ width: `${Math.round(roleStat.rotationRatio * 100)}%` }}
+                        className="absolute inset-y-0 right-0 bg-slate-100/95 rounded-r-full transition-all"
+                        style={{ width: `${100 - Math.round(roleStat.rotationRatio * 100)}%` }}
                       />
                     </div>
                   </div>

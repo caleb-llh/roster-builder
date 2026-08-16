@@ -98,7 +98,7 @@ export default function RosterStatsPanel({ stats, members, actionLog = [], avail
               QualityMetrics sections (Shift Distribution etc.) as the first
               detail. Read-only insight; not tied to generation. */}
           {availability && availability.series.length > 0 && (
-            <div className="mb-4">
+            <div className={`${glassCard} p-4 mb-4`}>
               <div className={`${tierSection} mb-3`}>Member Availability</div>
               <AvailabilityHeatmap data={availability} />
             </div>

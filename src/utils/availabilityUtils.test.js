@@ -125,18 +125,18 @@ describe('availabilityCellColor', () => {
     expect(color).toMatch(/^hsla\(215,/) // always the slate hue
   })
 
-  it('deepens (lower lightness) as coverage ratio rises within the scale', () => {
-    // Same hue throughout; lightness drops as cover improves.
-    const low = availabilityCellColor(3, 2, scale)  // ratio 1.5 = min → pale
-    const high = availabilityCellColor(6, 2, scale) // ratio 3 = max → deep
+  it('deepens (lower lightness) as coverage ratio falls within the scale', () => {
+    // Same hue throughout; darker slate now means thinner still-coverable bench.
+    const low = availabilityCellColor(3, 2, scale)  // ratio 1.5 = min → deep
+    const high = availabilityCellColor(6, 2, scale) // ratio 3 = max → pale
     const lightLow = Number(low.color.match(/(\d+)%,\s*0\.72/)[1])
     const lightHigh = Number(high.color.match(/(\d+)%,\s*0\.72/)[1])
-    expect(lightHigh).toBeLessThan(lightLow)
+    expect(lightLow).toBeLessThan(lightHigh)
   })
 
-  it('defaults a flat scale to the deepest (best) end', () => {
+  it('defaults a flat scale to the deepest (most concerning) end', () => {
     const { color } = availabilityCellColor(3, 1, undefined) // no scale → t = 1
     const light = Number(color.match(/(\d+)%,\s*0\.72/)[1])
-    expect(light).toBe(28) // RAMP_DEEP.l
+    expect(light).toBe(30) // RAMP_DEEP.l
   })
 })
